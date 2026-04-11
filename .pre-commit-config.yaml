@@ -26,6 +26,11 @@ repos:
         entry: "pinact run"
         language: system
         files: '\.github/(workflows/.*|actions/.*/action)\.(yaml|yml)$'
+      - id: ghalint
+        name: ghalint
+        entry: "ghalint run"
+        language: system
+        files: '\.github/(workflows/.*|actions/.*/action)\.(yaml|yml)$'
       - id: rumdl
         name: rumdl
         entry: "rumdl check"

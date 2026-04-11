@@ -1,14 +1,15 @@
+#:schema https://mise.jdx.dev/schema/mise.json
 
-[tools]
-uv = 'latest'
-rumdl = 'latest'
-tombi = 'latest'
-shellcheck = 'latest'
-shfmt = 'latest'
-actionlint = 'latest'
-yamllint = 'latest'
-ghalint = 'latest'
-zizmor = 'latest'
-editorconfig-checker = 'latest'
+[tools]  # tombi: format.rules.table-keys-order = "ascending"
+actionlint = "latest"
+editorconfig-checker = "latest"
+ghalint = "latest"
 pinact = "latest"
 prek = "latest"
+rumdl = "latest"
+shellcheck = "latest"
+shfmt = "latest"
+tombi = "latest"
+uv = "latest"
+yamllint = "latest"
+zizmor = "latest"

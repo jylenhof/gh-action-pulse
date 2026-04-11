@@ -13,6 +13,7 @@ jobs:
   prek-checks:
     name: Prek Checks
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - name: "Cleaning up"
         uses: gacts/run-and-post-run@81b6ce503cde93862cec047c54652e45c5dca991 # v1.4.3
