@@ -10,7 +10,7 @@ dependencies = [
 ]
 
 [project.scripts]
-show-status-each-github-action = "show_status_each_github_action:main"
+show-status-each-github-action = "show_status_each_github_action.main:main"
 
 [dependency-groups]
 dev = [
