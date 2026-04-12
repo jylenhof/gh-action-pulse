@@ -1,3 +1,4 @@
+from cmath import e
 import os
 import pathlib
 import re
@@ -51,7 +52,9 @@ def main() -> None:
         action_name = action[0]
         reference = action[1]
         description_version = action[2] if action[2] is not None else ""
-
+        actual_description_type = None
+        actual_reference_type = None
+        actual_date = None
         auth = Auth.Token(os.environ["GITHUB_TOKEN"])
         g = Github(auth=auth)
         repo = g.get_repo(action_name)
@@ -59,27 +62,49 @@ def main() -> None:
             commit = repo.get_commit(reference)
         except GithubException:
             commit = None
+
         if commit:
             print(repo.full_name)
-            print(commit.commit.committer.date)
+            actual_date = commit.commit.committer.date
             print("description_version:", description_version)
+            actual_reference_type = "sha"
             if description_version!="":
-                ref = repo.get_git_ref(f"tags/{description_version}")
-                if not ref:
-                    ref = repo.get_git_ref(f"heads/{description_version}")
-                if ref:
-                    print(ref.object.sha)
+                try:
+                    ref = repo.get_git_ref(f"tags/{description_version}")
+                except GithubException:
+                    ref = None
+                finally:
+                    if ref:
+                        actual_description_type = "tag"
+                    else:
+                        try:
+                            ref = repo.get_git_ref(f"heads/{description_version}")
+                        except GithubException:
+                            ref = None
+                        finally:
+                            if ref:
+                                actual_description_type = "branch"
+                            else:
+                                actual_description_type = "bullshit"
         else:
             ref = repo.get_git_ref(f"tags/{reference}")
-            if not ref:
-                ref = repo.get_git_ref(f"heads/{reference}")
             if ref:
-                print(repo.full_name)
-                print(ref.object.sha)
+                actual_reference_type = "tag"
+            else:
+                ref = repo.get_git_ref(f"heads/{reference}")
+                if ref:
+                    actual_reference_type = "branch"
 
-        print(f"Action: {action_name}, Reference: {reference}, Description: {description_version}")
+        print(f"Action: {action_name}")
+        print(f"actual_reference_type: {actual_reference_type}")
+        print(f"actual_description_type: {actual_description_type}")
+        print(f"actual_date: {actual_date}")
+        print("----")
 
-        # Verifier si reference est un tag ou une branche
-        # Sinon, c'est un commit SHA
-        # Si commit SHA, on peut chercher si la description contient une référence à un tag ou une branche
-        # et on vérifie que le commit SHA correspond à ce tag ou branche
+        # action_name => owner/repo
+        # actual_reference_type => tag, sha, branch
+        # actual_reference => sha, tag, ou branche
+        # real_sha_commit
+        # actual_description => bad_version, right_version, bullshit
+        # actual_date => date du commit ou date du tag ou date de la branche
+        # suggested_description_version => version ou simple description bullshit 
