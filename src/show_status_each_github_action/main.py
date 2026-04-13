@@ -1,4 +1,4 @@
-from cmath import e
+"""This script scans GitHub Actions workflow and action definition files for 'uses:' statements."""
 import os
 import pathlib
 import re
@@ -8,6 +8,7 @@ from github.GithubException import GithubException
 
 
 def main() -> None:
+    """Main function to scan for 'uses:' statements and analyze them."""
     results: dict[pathlib.Path, list[dict[int, str]]] = {}
 
     # Configuration for scanning: (directory, glob_pattern, search_keywords)
@@ -51,7 +52,7 @@ def main() -> None:
     for action in unique_actions:
         action_name = action[0]
         reference = action[1]
-        description_version = action[2] if action[2] is not None else ""
+        actual_description_version = action[2] if action[2] is not None else ""
         actual_description_type = None
         actual_reference_type = None
         actual_date = None
@@ -64,13 +65,11 @@ def main() -> None:
             commit = None
 
         if commit:
-            print(repo.full_name)
             actual_date = commit.commit.committer.date
-            print("description_version:", description_version)
             actual_reference_type = "sha"
-            if description_version!="":
+            if actual_description_version!="":
                 try:
-                    ref = repo.get_git_ref(f"tags/{description_version}")
+                    ref = repo.get_git_ref(f"tags/{actual_description_version}")
                 except GithubException:
                     ref = None
                 finally:
@@ -78,7 +77,7 @@ def main() -> None:
                         actual_description_type = "tag"
                     else:
                         try:
-                            ref = repo.get_git_ref(f"heads/{description_version}")
+                            ref = repo.get_git_ref(f"heads/{actual_description_version}")
                         except GithubException:
                             ref = None
                         finally:
@@ -97,6 +96,8 @@ def main() -> None:
 
         print(f"Action: {action_name}")
         print(f"actual_reference_type: {actual_reference_type}")
+        print(f"actual_reference: {reference}")
+        print(f"actual_description_version: {actual_description_version}")
         print(f"actual_description_type: {actual_description_type}")
         print(f"actual_date: {actual_date}")
         print("----")
