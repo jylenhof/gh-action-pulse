@@ -26,6 +26,6 @@ build-backend = "uv_build"
 
 [tool.ty.src]
 include = [
-    "src",
-    "tests",
+  "src",
+  "tests",
 ]
