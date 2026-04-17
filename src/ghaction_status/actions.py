@@ -91,7 +91,7 @@ class GithubAction:
             self.recommended.date = repo.get_commit(
                 sha=valid_semver_tags[0].commit.sha,
             ).commit.committer.date
-            self.recommended.description = f"# {valid_semver_tags[0].name}"
+            self.recommended.description = f"{valid_semver_tags[0].name}"
         elif self.actual.type == "branch" or self.actual.description_type == "branch":
             self.recommended.reference = repo.get_branch(
                 self.recommended.reference,
@@ -99,7 +99,26 @@ class GithubAction:
             self.recommended.date = repo.get_commit(
                 sha=self.recommended.reference,
             ).commit.committer.date if self.recommended.reference is not None else None
-            self.recommended.description = f"# {self.actual.description}"
+            self.recommended.description = f"{self.actual.description}"
+        else:
+            # Look for the actual reference in the sorted tags first, then branches
+            for tag in valid_semver_tags:
+                if tag.commit.sha == self.actual.reference:
+                    self.recommended.reference = tag.commit.sha
+                    self.recommended.date = repo.get_commit(
+                        sha=tag.commit.sha,
+                    ).commit.committer.date
+                    self.recommended.description = f"{tag.name}"
+                    return
+            # If not found in tags, look in last commit of branches, perhaps we should do better
+            for branch in repo.get_branches():
+                if branch.commit.sha == self.actual.reference:
+                    self.recommended.reference = branch.commit.sha
+                    self.recommended.date = repo.get_commit(
+                        sha=branch.commit.sha,
+                    ).commit.committer.date
+                    self.recommended.description = f"{branch.name}"
+                    return
 
     def _set_actual_description_type(self, repo: Repository) -> None:
         """Determines the type of the actual description."""
@@ -128,9 +147,13 @@ class GithubAction:
     def _set_actual_reference_type_and_date(self, repo: Repository) -> None:
         """Determines the type and date of the actual reference."""
         try:
+            # actually get_commit look for both sha and tag
             commit = repo.get_commit(sha=self.actual.reference)
-            self.actual.type = "sha"
             self.actual.date = commit.commit.committer.date
+            if commit.commit.sha == self.actual.reference:
+                self.actual.type = "sha"
+            else:
+                self.actual.type = "tag"
         except GithubException:
             pass
         else:
