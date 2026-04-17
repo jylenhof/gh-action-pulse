@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "Get the status of each GitHub Action in a repository"
 readme = "README.md"
 requires-python = ">=3.14"
-authors = [{ name = "jylenhof", email = "jygithub@lenhof.eu.org" }]
+authors = [{ name = "Jean-Yves LENHOF", email = "jygithub@lenhof.eu.org" }]
 dependencies = [
   "pygithub>=2.9.0",
 ]
@@ -23,3 +23,9 @@ dev = [
 [build-system]
 requires = ["uv_build>=0.11.5,<0.12.0"]
 build-backend = "uv_build"
+
+[tool.ty.src]
+include = [
+    "src",
+    "tests",
+]
