@@ -10,17 +10,48 @@ repos:
       - id: check-shebang-scripts-are-executable
       - id: check-executables-have-shebangs
       - id: check-yaml
+        args: [--allow-multiple-documents]
+      - id: check-merge-conflict
   - repo: local
     hooks:
+      - id: editorconfig-checker # editorconfig-checker config
+        name: editorconfig-checker
+        entry: ec
+        language: system
+        exclude: 'LICENSE'
+      - id: rumdl # markdown linter
+        name: rumdl
+        entry: "rumdl check"
+        language: system
+        files: '\.md$'
+      - id: tombi-format # toml formatter
+        name: "tombi format"
+        entry: "tombi format"
+        language: system
+        files: '\.toml$'
+      - id: tombi-lint # toml linter
+        name: "tombi lint"
+        entry: "tombi lint"
+        language: system
+        files: '\.toml$'
+      - id: shfmt # shell formatter
+        name: "shfmt"
+        entry: "shfmt"
+        language: system
+        files: '\.(sh|bash)$'
+      - id: shellcheck # shell linter
+        name: "shellcheck"
+        entry: "shellcheck"
+        language: system
+        files: '\.(sh|bash)$'
+
+
+      # github actions and workflows
       - id: actionlint
         name: actionlint
         entry: actionlint
         language: system
         files: '\.github/workflows/.*\.(yaml|yml)$'
-      - id: editorconfig-checker
-        name: editorconfig-checker
-        entry: ec
-        language: system
       - id: pinact
         name: pinact
         entry: "pinact run"
@@ -31,23 +62,30 @@ repos:
         entry: "ghalint run"
         language: system
         files: '\.github/(workflows/.*|actions/.*/action)\.(yaml|yml)$'
-      - id: rumdl
-        name: rumdl
-        entry: "rumdl check"
-        language: system
-        files: '\.md$'
-      - id: tombi-format
-        name: "tombi format"
-        entry: "tombi format"
-        language: system
-        files: '\.toml$'
-      - id: tombi-lint
-        name: "tombi lint"
-        entry: "tombi lint"
-        language: system
-        files: '\.toml$'
       - id: zizmor
         name: zizmor
         entry: zizmor
         language: system
         files: '(\.github/(workflows/.*|actions/.*/action|dependabot\.ya?ml))|(action\.ya?ml)$'
+
+      # python checks
+      - id: "ruff format"
+        name: "ruff format"
+        entry: "uv run --frozen ruff format --check"
+        language: system
+        files: '\.py$'
+      - id: "ruff lint"
+        name: "ruff lint"
+        entry: "uv run --frozen ruff check"
+        language: system
+        files: '\.py$'
+      - id: "pylint"
+        name: "pylint"
+        entry: "uv run --frozen pylint src"
+        language: system
+        files: '\.py$'
+      - id: "ty"
+        name: "ty"
+        entry: "uv run --frozen ty check"
+        language: system
+        files: '\.py$'

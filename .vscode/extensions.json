@@ -1,0 +1,22 @@
+{
+    "recommendations": [
+        "streetsidesoftware.code-spell-checker",
+        "editorconfig.editorconfig",
+        "github.vscode-github-actions",
+        "yzhang.markdown-all-in-one",
+        "hverlin.mise-vscode",
+        "ms-python.vscode-pylance",
+        "ms-python.pylint",
+        "ms-python.python",
+        "ms-python.debugpy",
+        "ms-python.vscode-python-envs",
+        "charliermarsh.ruff",
+        "rvben.rumdl",
+        "timonwong.shellcheck",
+        "lionas.shellcheckselection",
+        "tombi-toml.tombi",
+        "astral-sh.ty",
+        "redhat.vscode-yaml",
+        "zizmor.zizmor-vscode"
+    ]
+}

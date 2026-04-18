@@ -1,12 +1,17 @@
 """This script scans GitHub Actions workflow and action definition files for 'uses:' statements."""
 
+import logging
+
 from gh_action_pulse.actions import UniqGithubActions
 from gh_action_pulse.full_list_of_existing_actions import FullListOfExistingActions
 from gh_action_pulse.helpers.constants import SEARCH_CONFIGS
 
+logger = logging.getLogger(__name__)
+
 
 def main() -> None:
     """Main function to scan for 'uses:' statements and analyze them."""
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
     full_list_of_existing_actions = FullListOfExistingActions(
         search_configs=SEARCH_CONFIGS,
     )
@@ -15,7 +20,7 @@ def main() -> None:
     uniq_github_actions = UniqGithubActions()
     uniq_github_actions.init_from_full_list(results)
 
-    print("results:", results)
+    logger.info("results: %s", results)
 
     uniq_github_actions.get_fully_qualified()
 
@@ -30,21 +35,13 @@ def main() -> None:
         recommended_reference_date = action.recommended.date
         recommended_description = action.recommended.description
 
-        print(f"Action: {action_name}")
-        print(f"actual_reference_type: {actual_reference_type}")
-        print(f"actual_reference: {reference}")
-        print(f"actual_description_version: {actual_description_version}")
-        print(f"actual_description_type: {actual_description_type}")
-        print(f"actual_date: {actual_date}")
-        print(f"recommended_reference: {recommended_reference}")
-        print(f"recommended_reference_date: {recommended_reference_date}")
-        print(f"recommended_description: {recommended_description}")
-        print("----")
-
-        # action_name => owner/repo
-        # actual_reference_type => tag, sha, branch
-        # actual_reference => sha, tag, ou branche
-        # real_sha_commit
-        # actual_description => bad_version, right_version, bullshit
-        # actual_date => date du commit ou date du tag ou date de la branche
-        # suggested_description_version => version ou simple description bullshit
+        logger.info("Action: %s", action_name)
+        logger.info("actual_reference_type: %s", actual_reference_type)
+        logger.info("actual_reference: %s", reference)
+        logger.info("actual_description_version: %s", actual_description_version)
+        logger.info("actual_description_type: %s", actual_description_type)
+        logger.info("actual_date: %s", actual_date)
+        logger.info("recommended_reference: %s", recommended_reference)
+        logger.info("recommended_reference_date: %s", recommended_reference_date)
+        logger.info("recommended_description: %s", recommended_description)
+        logger.info("----")
