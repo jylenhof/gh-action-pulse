@@ -1,6 +1,6 @@
 [pytest]
-norecursedirs = [".git","old","docs","dist","build"]
-addopts = ["--strict-markers","--strict-config","-ra"]
+norecursedirs = [".git", "old", "docs", "dist", "build"]
+addopts = ["--strict-markers", "--strict-config", "-ra"]
 pythonpath = ["src"]
 testpaths = ["tests"]
 filterwarnings = []
