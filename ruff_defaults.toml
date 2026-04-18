@@ -7,6 +7,7 @@ select = [
 
 ignore = [
   "ISC001",  # The following rule may cause conflicts when used with the formatter
+  "COM812",  # The following rule may cause conflicts when used with the formatter
 ]
 
 [lint.per-file-ignores]

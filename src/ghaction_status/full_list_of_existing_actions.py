@@ -21,7 +21,7 @@ class FullListOfExistingActions:
                 try:
                     with file_path.open(encoding="utf-8") as f:
                         for line_num, line in enumerate(f, 1):
-                            if re.match(regex_pattern,line):
+                            if re.match(regex_pattern, line):
                                 matches.append({line_num: line.strip()})
                 except OSError, UnicodeDecodeError:
                     continue

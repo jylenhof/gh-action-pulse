@@ -22,9 +22,7 @@ def main() -> None:
     for action in uniq_github_actions.get_actions():
         action_name = action.name
         reference = action.actual.reference
-        actual_description_version = (
-            action.actual.description if action.actual.description is not None else ""
-        )
+        actual_description_version = action.actual.description if action.actual.description is not None else ""
         actual_description_type = action.actual.description_type
         actual_reference_type = action.actual.type
         actual_date = action.actual.date

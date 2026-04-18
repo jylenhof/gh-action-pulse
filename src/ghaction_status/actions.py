@@ -1,4 +1,5 @@
 """Defines the GithubAction and UniqGithubActions classes to handle action identification and metadata retrieval."""
+
 import os
 import re
 from dataclasses import dataclass
@@ -44,7 +45,10 @@ class GithubAction:
     recommended: Recommendation
 
     def __init__(
-        self, name: str, reference: str, actual_description: str | None = None,
+        self,
+        name: str,
+        reference: str,
+        actual_description: str | None = None,
     ) -> None:
         """Initialize a GithubAction with its name, reference, and optional description."""
         self.name = name
@@ -93,12 +97,20 @@ class GithubAction:
             ).commit.committer.date
             self.recommended.description = f"{valid_semver_tags[0].name}"
         elif self.actual.type == "branch" or self.actual.description_type == "branch":
-            self.recommended.reference = repo.get_branch(
-                self.recommended.reference,
-            ).commit.sha if self.recommended.reference is not None else None
-            self.recommended.date = repo.get_commit(
-                sha=self.recommended.reference,
-            ).commit.committer.date if self.recommended.reference is not None else None
+            self.recommended.reference = (
+                repo.get_branch(
+                    self.recommended.reference,
+                ).commit.sha
+                if self.recommended.reference is not None
+                else None
+            )
+            self.recommended.date = (
+                repo.get_commit(
+                    sha=self.recommended.reference,
+                ).commit.committer.date
+                if self.recommended.reference is not None
+                else None
+            )
             self.recommended.description = f"{self.actual.description}"
         else:
             # Look for the actual reference in the sorted tags first, then branches
@@ -188,7 +200,7 @@ class UniqGithubActions:
         """Initialize an empty set of GitHub Actions."""
         self._actions: set[GithubAction] = set()
 
-    def init_from_full_list(self, full_list: dict[Path, list[dict[int, str]]])-> None:
+    def init_from_full_list(self, full_list: dict[Path, list[dict[int, str]]]) -> None:
         """Parse action references from a scanned list of file matches."""
         action_pattern = re.compile(r"^\s*[-]?\s{0,1}uses:\s*([^@\s]+)@([^\s#]+)(?:\s+#\s+(.+))?")
 
@@ -198,9 +210,7 @@ class UniqGithubActions:
                     if match := action_pattern.search(line):
                         name: str = match.group(1)
                         reference: str = match.group(2)
-                        actual_description: str | None = (
-                            match.group(3) if match.group(3) is not None else None
-                        )
+                        actual_description: str | None = match.group(3) if match.group(3) is not None else None
                         action = GithubAction(
                             name=name,
                             reference=reference,
@@ -208,7 +218,7 @@ class UniqGithubActions:
                         )
                         self.add(action)
 
-    def add(self, action: GithubAction)-> None:
+    def add(self, action: GithubAction) -> None:
         """Add a unique GithubAction to the collection."""
         self._actions.add(action)
 
