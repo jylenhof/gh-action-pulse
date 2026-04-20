@@ -84,18 +84,24 @@ class GithubAction:
         for tag in repo.get_tags():
             try:
                 Version(tag.name)
-                valid_semver_tags.append(tag)
+                valid_semver_tags.append(tag)  # pyright: ignore[reportUnknownMemberType]
             except InvalidVersion:
                 # Ignore tags that do not conform to semantic versioning
                 pass
 
-        valid_semver_tags.sort(key=lambda tag: Version(version=tag.name), reverse=True)
+        valid_semver_tags.sort(  # pyright: ignore[reportUnknownMemberType]
+            key=lambda tag: Version(  # pyright: ignore[reportUnknownLambdaType]
+                version=tag.name  # pyright: ignore # noqa: PGH003
+            ),
+            reverse=True,
+        )
         if self.actual.type == "tag" or self.actual.description_type == "tag":
-            self.recommended.reference = valid_semver_tags[0].commit.sha
+            recommended_tag = valid_semver_tags[0]  # pyright: ignore # noqa: PGH003
+            self.recommended.reference = recommended_tag.commit.sha  # pyright: ignore[reportUnknownMemberType]
             self.recommended.date = repo.get_commit(
-                sha=valid_semver_tags[0].commit.sha,
+                sha=recommended_tag.commit.sha,  # pyright: ignore[reportUnknownArgumentType,reportUnknownMemberType]
             ).commit.committer.date
-            self.recommended.description = f"{valid_semver_tags[0].name}"
+            self.recommended.description = f"{recommended_tag.name}"  # pyright: ignore[reportUnknownMemberType]
         elif self.actual.type == "branch" or self.actual.description_type == "branch":
             self.recommended.reference = (
                 repo.get_branch(
@@ -114,13 +120,13 @@ class GithubAction:
             self.recommended.description = f"{self.actual.description}"
         else:
             # Look for the actual reference in the sorted tags first, then branches
-            for tag in valid_semver_tags:
-                if tag.commit.sha == self.actual.reference:
-                    self.recommended.reference = tag.commit.sha
+            for tag in valid_semver_tags:  # pyright: ignore[reportUnknownVariableType]
+                if tag.commit.sha == self.actual.reference:  # pyright: ignore[reportUnknownMemberType]
+                    self.recommended.reference = tag.commit.sha  # pyright: ignore[reportUnknownMemberType]
                     self.recommended.date = repo.get_commit(
-                        sha=tag.commit.sha,
+                        sha=tag.commit.sha,  # pyright: ignore[reportUnknownMemberType,reportUnknownArgumentType]
                     ).commit.committer.date
-                    self.recommended.description = f"{tag.name}"
+                    self.recommended.description = f"{tag.name}"  # pyright: ignore[reportUnknownMemberType]
                     return
             # If not found in tags, look in last commit of branches, perhaps we should do better
             for branch in repo.get_branches():

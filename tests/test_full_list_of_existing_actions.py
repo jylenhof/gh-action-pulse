@@ -70,7 +70,10 @@ def test_full_list_of_existing__os_error(tmp_path: Path, caplog: pytest.LogCaptu
     search_configs = [(workflow_dir, "*.yml")]
 
     # Patching open to simulate a disk/permission error
-    with patch("pathlib.Path.open", side_effect=OSError("Read error")), caplog.at_level(logging.ERROR):
+    with (
+        patch("pathlib.Path.open", side_effect=OSError("Read error")),
+        caplog.at_level(logging.ERROR),
+    ):
         scanner = FullListOfExistingActions(search_configs)
         assert len(scanner.get_results()) == 0
 

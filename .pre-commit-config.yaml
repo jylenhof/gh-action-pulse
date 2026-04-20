@@ -81,9 +81,15 @@ repos:
         files: '\.py$'
       - id: "pylint"
         name: "pylint"
-        entry: "uv run --frozen pylint src"
+        entry: "uv run --frozen pylint src tests"
         language: system
         files: '\.py$'
+      - id: "pytest"
+        name: "pytest"
+        entry: "uv run --frozen pytest"
+        language: system
+        types: [python]
+        pass_filenames: false
       - id: "ty"
         name: "ty"
         entry: "uv run --frozen ty check"

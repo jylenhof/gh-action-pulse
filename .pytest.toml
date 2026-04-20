@@ -1,6 +1,13 @@
 [pytest]
 norecursedirs = [".git", "old", "docs", "dist", "build"]
-addopts = ["--strict-markers", "--strict-config", "-ra", "-nauto", "--cov"]
+addopts = [
+  "--strict-markers",
+  "--strict-config",
+  "-ra",
+  "-nauto",
+  "--cov",
+  "--cov-fail-under=60",  # To be bumped to 80 at least
+]
 pythonpath = ["src"]
 testpaths = ["tests"]
 filterwarnings = []
