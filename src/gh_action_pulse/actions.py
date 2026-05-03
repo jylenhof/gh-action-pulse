@@ -95,31 +95,24 @@ class GithubAction:
             ),
             reverse=True,
         )
-        if self.actual.reference_type == "tag" or self.actual.description_type == "tag":
+        if self.actual.reference_type == "tag":
             recommended_tag = valid_semver_tags[0]  # pyright: ignore # noqa: PGH003
             self.recommended.reference = recommended_tag.commit.sha  # pyright: ignore[reportUnknownMemberType]
             self.recommended.date = repo.get_commit(
                 sha=recommended_tag.commit.sha,  # pyright: ignore[reportUnknownArgumentType,reportUnknownMemberType]
             ).commit.committer.date
             self.recommended.description = f"{recommended_tag.name}"  # pyright: ignore[reportUnknownMemberType]
-        elif self.actual.reference_type == "branch" or self.actual.description_type == "branch":
-            branch_name = self.actual.description if self.actual.description_type == "branch" else self.actual.reference
-            self.recommended.reference = (
-                repo.get_branch(
-                    branch_name,
-                ).commit.sha
-                if branch_name is not None
-                else None
-            )
-            self.recommended.date = (
-                repo.get_commit(
-                    sha=self.recommended.reference,
-                ).commit.committer.date
-                if self.recommended.reference is not None
-                else None
-            )
-            self.recommended.description = f"{self.actual.description}"
+        elif self.actual.reference_type == "branch":
+            branch_name = self.actual.reference
+            self.recommended.reference = repo.get_branch(
+                branch_name,
+            ).commit.sha
+            self.recommended.date = repo.get_commit(
+                sha=self.recommended.reference,
+            ).commit.committer.date
+            self.recommended.description = f"{branch_name}"
         else:
+            # OK, now we will check if the actual_description is the real one
             # Look for the actual reference in the sorted tags first, then branches
             for tag in valid_semver_tags:  # pyright: ignore[reportUnknownVariableType]
                 if tag.commit.sha == self.actual.reference:  # pyright: ignore[reportUnknownMemberType]

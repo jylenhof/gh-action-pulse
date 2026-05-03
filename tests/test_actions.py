@@ -74,11 +74,11 @@ class TestGithubAction:
             ("actions/checkout", "v4", "tag", "not_existing_ref", "bullshit"),
             ("actions/checkout", "sha-for-v4", "sha", None, None),
             ("actions/checkout", "sha-for-v4", "sha", "v4.0.0", "tag"),
-            # ("actions/checkout", "sha-for-v4", "sha", "main", "branch"), # not working
+            ("actions/checkout", "sha-for-v4", "sha", "main", "branch"),
             ("actions/checkout", "sha-for-v4", "sha", "not_existing_ref", "bullshit"),
         ],
     )
-    def test__set_recommended_reference_and_date_initial_tag(
+    def test__set_recommended_reference_and_date_tag_or_sha(
         self,
         name: str,
         reference: str,
