@@ -17,6 +17,7 @@ ignore = [
   "INP001",  # INP001: File {filename} is part of an implicit namespace package. Add an __init__.py.
   "D100",  # D100: Missing docstring in public module.
   "D104",  # D104: Missing docstring in public package
+  "SLF001"  # SLF001: Missing __init__.py in package
 ]
 
 "**/tests/**/*" = [
@@ -25,6 +26,7 @@ ignore = [
   "INP001",  # INP001: File {filename} is part of an implicit namespace package. Add an __init__.py.
   "D100",  # D100: Missing docstring in public module.
   "D104",  # D104: Missing docstring in public package
+  "SLF001"  # SLF001: Missing __init__.py in package
 ]
 
 # Use Google-style docstrings.

@@ -22,7 +22,7 @@ class ActualState:
 
     reference: str
     description: str | None = None
-    type: Literal["sha", "tag", "branch", "bullshit"] | None = None
+    reference_type: Literal["sha", "tag", "branch", "bullshit"] | None = None
     description_type: Literal["tag", "branch", "bullshit"] | None = None
     date: datetime.datetime | None = None
 
@@ -95,19 +95,20 @@ class GithubAction:
             ),
             reverse=True,
         )
-        if self.actual.type == "tag" or self.actual.description_type == "tag":
+        if self.actual.reference_type == "tag" or self.actual.description_type == "tag":
             recommended_tag = valid_semver_tags[0]  # pyright: ignore # noqa: PGH003
             self.recommended.reference = recommended_tag.commit.sha  # pyright: ignore[reportUnknownMemberType]
             self.recommended.date = repo.get_commit(
                 sha=recommended_tag.commit.sha,  # pyright: ignore[reportUnknownArgumentType,reportUnknownMemberType]
             ).commit.committer.date
             self.recommended.description = f"{recommended_tag.name}"  # pyright: ignore[reportUnknownMemberType]
-        elif self.actual.type == "branch" or self.actual.description_type == "branch":
+        elif self.actual.reference_type == "branch" or self.actual.description_type == "branch":
+            branch_name = self.actual.description if self.actual.description_type == "branch" else self.actual.reference
             self.recommended.reference = (
                 repo.get_branch(
-                    self.recommended.reference,
+                    branch_name,
                 ).commit.sha
-                if self.recommended.reference is not None
+                if branch_name is not None
                 else None
             )
             self.recommended.date = (
@@ -122,11 +123,11 @@ class GithubAction:
             # Look for the actual reference in the sorted tags first, then branches
             for tag in valid_semver_tags:  # pyright: ignore[reportUnknownVariableType]
                 if tag.commit.sha == self.actual.reference:  # pyright: ignore[reportUnknownMemberType]
-                    self.recommended.reference = tag.commit.sha  # pyright: ignore[reportUnknownMemberType]
+                    self.recommended.reference = valid_semver_tags[0].commit.sha  # pyright: ignore[reportUnknownMemberType]
                     self.recommended.date = repo.get_commit(
-                        sha=tag.commit.sha,  # pyright: ignore[reportUnknownMemberType,reportUnknownArgumentType]
+                        sha=valid_semver_tags[0].commit.sha,  # pyright: ignore[reportUnknownMemberType,reportUnknownArgumentType]
                     ).commit.committer.date
-                    self.recommended.description = f"{tag.name}"  # pyright: ignore[reportUnknownMemberType]
+                    self.recommended.description = valid_semver_tags[0].name  # pyright: ignore[reportUnknownMemberType]
                     return
             # If not found in tags, look in last commit of branches, perhaps we should do better
             for branch in repo.get_branches():
@@ -169,9 +170,9 @@ class GithubAction:
             commit = repo.get_commit(sha=self.actual.reference)
             self.actual.date = commit.commit.committer.date
             if commit.commit.sha == self.actual.reference:
-                self.actual.type = "sha"
+                self.actual.reference_type = "sha"
             else:
-                self.actual.type = "tag"
+                self.actual.reference_type = "tag"
         except GithubException:
             pass
         else:
@@ -179,7 +180,7 @@ class GithubAction:
 
         try:
             ref = repo.get_git_ref(f"tags/{self.actual.reference}")
-            self.actual.type = "tag"
+            self.actual.reference_type = "tag"
             self.actual.date = repo.get_commit(sha=ref.object.sha).commit.committer.date
         except GithubException:
             pass
@@ -188,14 +189,14 @@ class GithubAction:
 
         try:
             ref = repo.get_git_ref(f"heads/{self.actual.reference}")
-            self.actual.type = "branch"
+            self.actual.reference_type = "branch"
             self.actual.date = repo.get_commit(sha=ref.object.sha).commit.committer.date
         except GithubException:
             pass
         else:
             return
 
-        self.actual.type = "bullshit"
+        self.actual.reference_type = "bullshit"
         self.actual.date = None
 
 
@@ -231,6 +232,10 @@ class UniqGithubActions:
     def get_actions(self) -> set[GithubAction]:
         """Return the set of collected GitHub Actions."""
         return self._actions
+
+    def __getitem__(self, index: int) -> GithubAction:
+        """Allow indexing into the set of actions."""
+        return list(self._actions)[index]
 
     def get_fully_qualified(self) -> set[GithubAction]:
         """Update all actions in the collection with metadata from the GitHub API."""

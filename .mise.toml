@@ -4,6 +4,7 @@
 actionlint = "latest"
 editorconfig-checker = "latest"
 ghalint = "latest"
+llmfit = "latest"
 pinact = "latest"
 prek = "latest"
 rumdl = "latest"

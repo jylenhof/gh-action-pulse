@@ -11,7 +11,7 @@ dependencies = [
 ]
 
 [project.scripts]
-gh-action-pualse = "gh_action_pulse.main:main"
+gh-action-pulse = "gh_action_pulse.main:main"
 
 [dependency-groups]
 dev = [

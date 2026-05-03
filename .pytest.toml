@@ -6,6 +6,8 @@ addopts = [
   "-ra",
   "-nauto",
   "--cov",
+  "--cov-report=lcov:lcov.info",
+  "--cov-report=term",
   "--cov-fail-under=60",  # To be bumped to 80 at least
 ]
 pythonpath = ["src"]

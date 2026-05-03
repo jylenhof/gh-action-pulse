@@ -483,6 +483,9 @@ disable = [
   "unspecified-encoding",
   "useless-with-lock",
   "nested-min-max",
+  # Pylint other from issue https://github.com/astral-sh/ruff/issues/970
+  # to be completed
+  "protected-access",
 ]
 
 # Enable the message, report, category or checker with the given id(s). You can

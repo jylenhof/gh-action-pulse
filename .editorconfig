@@ -13,5 +13,9 @@ insert_final_newline = true
 max_line_length = 120
 trim_trailing_whitespace = true
 
+[*.py]
+# enforced by ruff, but ruff know that hint comment does not count as real code
+max_line_length = unset
+
 [README.md]
 max_line_length = unset

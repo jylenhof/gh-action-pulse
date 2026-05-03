@@ -54,9 +54,10 @@ repos:
         files: '\.github/workflows/.*\.(yaml|yml)$'
       - id: pinact
         name: pinact
-        entry: "pinact run"
+        entry: "pinact run -u --min-age 7"
         language: system
         files: '\.github/(workflows/.*|actions/.*/action)\.(yaml|yml)$'
+        pass_filenames: false
       - id: ghalint
         name: ghalint
         entry: "ghalint run"
