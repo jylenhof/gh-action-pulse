@@ -23,13 +23,12 @@ def main() -> None:
     logger.info("results: %s", results)
 
     uniq_github_actions.get_fully_qualified()
-
     for action in uniq_github_actions.get_actions():
         action_name = action.name
         reference = action.actual.reference
         actual_description_version = action.actual.description or ""
         actual_description_type = action.actual.description_type
-        actual_reference_type = action.actual.type
+        actual_reference_type = action.actual.reference_type
         actual_date = action.actual.date
         recommended_reference = action.recommended.reference
         recommended_reference_date = action.recommended.date
@@ -45,3 +44,8 @@ def main() -> None:
         logger.info("recommended_reference_date: %s", recommended_reference_date)
         logger.info("recommended_description: %s", recommended_description)
         logger.info("----")
+
+
+# Run the main function when the script is executed directly (useful for vscode debugger)
+if __name__ == "__main__":
+    main()
