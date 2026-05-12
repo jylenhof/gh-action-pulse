@@ -28,9 +28,11 @@ uv tool install . --force --reinstall
 Randoms items
 
 - Strengthen pre-commit
-- Add unit tests with appropriate workflow (pytest)
+- Add unit tests
+- Separate unit tests with appropriate workflow (pytest)
+- add check about GITHUB_TOKEN variable availability
 - Add E2E tests with appropriate workflow (pytest and/or bats)
-- Push wheel to pypi when sufficient interest
+- Push wheel to pypi when sufficient interest/stability
 - Be able to do modifications to actual workflows
 - Be able to check for nodejs version in upstream repo
 - Be able to raise some warnings if there's no recent upstream tag within x days

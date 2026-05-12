@@ -1,5 +1,6 @@
 """Defines the GithubAction and UniqGithubActions classes to handle action identification and metadata retrieval."""
 
+import logging
 import os
 import re
 from dataclasses import dataclass
@@ -8,6 +9,9 @@ from typing import TYPE_CHECKING, Literal
 from github import Auth, Github
 from github.GithubException import GithubException
 from packaging.version import InvalidVersion, Version
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     import datetime
@@ -78,59 +82,32 @@ class GithubAction:
         self._set_recommended_reference_and_date(repo)
         return self
 
-    def _set_recommended_reference_and_date(self, repo: Repository) -> None:
-        """Determines the recommended reference and date."""
-        valid_semver_tags = []
-        for tag in repo.get_tags():
-            try:
-                Version(tag.name)
-                valid_semver_tags.append(tag)  # pyright: ignore[reportUnknownMemberType]
-            except InvalidVersion:
-                # Ignore tags that do not conform to semantic versioning
-                pass
-
-        valid_semver_tags.sort(  # pyright: ignore[reportUnknownMemberType]
-            key=lambda tag: Version(  # pyright: ignore[reportUnknownLambdaType]
-                version=tag.name  # pyright: ignore # noqa: PGH003
-            ),
-            reverse=True,
-        )
-        if self.actual.reference_type == "tag":
-            recommended_tag = valid_semver_tags[0]  # pyright: ignore # noqa: PGH003
-            self.recommended.reference = recommended_tag.commit.sha  # pyright: ignore[reportUnknownMemberType]
-            self.recommended.date = repo.get_commit(
-                sha=recommended_tag.commit.sha,  # pyright: ignore[reportUnknownArgumentType,reportUnknownMemberType]
-            ).commit.committer.date
-            self.recommended.description = f"{recommended_tag.name}"  # pyright: ignore[reportUnknownMemberType]
-        elif self.actual.reference_type == "branch":
-            branch_name = self.actual.reference
-            self.recommended.reference = repo.get_branch(
-                branch_name,
-            ).commit.sha
-            self.recommended.date = repo.get_commit(
-                sha=self.recommended.reference,
-            ).commit.committer.date
-            self.recommended.description = f"{branch_name}"
+    def _set_actual_reference_type_and_date(self, repo: Repository) -> None:
+        """Determines the type and date of the actual reference."""
+        try:
+            # actually get_commit look for both sha and tag
+            commit = repo.get_commit(sha=self.actual.reference)
+            self.actual.date = commit.commit.committer.date
+            if commit.commit.sha == self.actual.reference:
+                self.actual.reference_type = "sha"
+            else:
+                self.actual.reference_type = "tag"
+        except GithubException:
+            pass
         else:
-            # OK, now we will check if the actual_description is the real one
-            # Look for the actual reference in the sorted tags first, then branches
-            for tag in valid_semver_tags:  # pyright: ignore[reportUnknownVariableType]
-                if tag.commit.sha == self.actual.reference:  # pyright: ignore[reportUnknownMemberType]
-                    self.recommended.reference = valid_semver_tags[0].commit.sha  # pyright: ignore[reportUnknownMemberType]
-                    self.recommended.date = repo.get_commit(
-                        sha=valid_semver_tags[0].commit.sha,  # pyright: ignore[reportUnknownMemberType,reportUnknownArgumentType]
-                    ).commit.committer.date
-                    self.recommended.description = valid_semver_tags[0].name  # pyright: ignore[reportUnknownMemberType]
-                    return
-            # If not found in tags, look in last commit of branches, perhaps we should do better
-            for branch in repo.get_branches():
-                if branch.commit.sha == self.actual.reference:
-                    self.recommended.reference = branch.commit.sha
-                    self.recommended.date = repo.get_commit(
-                        sha=branch.commit.sha,
-                    ).commit.committer.date
-                    self.recommended.description = f"{branch.name}"
-                    return
+            return
+
+        try:
+            ref = repo.get_git_ref(f"heads/{self.actual.reference}")
+            self.actual.reference_type = "branch"
+            self.actual.date = repo.get_commit(sha=ref.object.sha).commit.committer.date
+        except GithubException:
+            pass
+        else:
+            return
+
+        self.actual.reference_type = "bullshit"
+        self.actual.date = None
 
     def _set_actual_description_type(self, repo: Repository) -> None:
         """Determines the type of the actual description."""
@@ -156,41 +133,77 @@ class GithubAction:
 
         self.actual.description_type = "bullshit"
 
-    def _set_actual_reference_type_and_date(self, repo: Repository) -> None:
-        """Determines the type and date of the actual reference."""
+    def _set_recommended_reference_and_date(self, repo: Repository) -> None:
+        """Orchestrates the recommendation logic based on reference type and versioning."""
+        valid_semver_tags = self._get_valid_semver_tags(repo)
+
+        match self.actual.reference_type:
+            case "tag":
+                self._set_recommended_reference_and_date_to_tag_if_exists(valid_semver_tags)
+            case "branch":
+                self._set_recommended_with_fallback(repo, valid_semver_tags, self.actual.reference)
+            case "sha":
+                self._set_recommended_for_sha(repo, valid_semver_tags)
+            case "bullshit":
+                logger.error("Cannot recommend update for invalid reference type.")
+
+    def _get_valid_semver_tags(self, repo: Repository) -> list:
+        valid_semver_tags = []
+        for tag in repo.get_tags():
+            try:
+                Version(tag.name)
+                valid_semver_tags.append(tag)
+            except InvalidVersion:
+                pass
+
+        valid_semver_tags.sort(key=lambda tag: Version(tag.name), reverse=True)
+        return valid_semver_tags
+
+    def _set_recommended_for_sha(self, repo: Repository, valid_semver_tags: list) -> None:
+        match self.actual.description_type:
+            case "tag":
+                self._set_recommended_reference_and_date_to_tag_if_exists(valid_semver_tags)
+                return
+            case "branch":
+                self._set_recommended_with_fallback(repo, valid_semver_tags, self.actual.reference)
+                return
+            case _:
+                if self._actual_sha_matches_tag(repo):
+                    self._set_recommended_reference_and_date_to_tag_if_exists(valid_semver_tags)
+
+                if self.recommended.reference is None:
+                    self._set_recommended_to_branch(repo, self.actual.reference)
+
+    def _actual_sha_matches_tag(self, repo: Repository) -> bool:
+        return any(tag.commit.sha == self.actual.reference for tag in repo.get_tags())
+
+    def _set_recommended_to_branch(self, repo: Repository, branch_name: str) -> None:
+        """Sets the recommendation to the latest commit of a specific branch."""
         try:
-            # actually get_commit look for both sha and tag
-            commit = repo.get_commit(sha=self.actual.reference)
-            self.actual.date = commit.commit.committer.date
-            if commit.commit.sha == self.actual.reference:
-                self.actual.reference_type = "sha"
-            else:
-                self.actual.reference_type = "tag"
+            branch = repo.get_branch(branch_name)
+            self.recommended.reference = branch.commit.sha
+            self.recommended.date = branch.commit.commit.committer.date
+            self.recommended.description = branch_name
         except GithubException:
             pass
-        else:
-            return
 
-        try:
-            ref = repo.get_git_ref(f"tags/{self.actual.reference}")
-            self.actual.reference_type = "tag"
-            self.actual.date = repo.get_commit(sha=ref.object.sha).commit.committer.date
-        except GithubException:
-            pass
-        else:
-            return
+    def _set_recommended_with_fallback(self, repo: Repository, valid_tags: list, branch_name: str) -> None:
+        """Tries to recommend the latest tag, falling back to a branch if the tag is older than the current pin."""
+        self._set_recommended_reference_and_date_to_tag_if_exists(valid_tags)
 
-        try:
-            ref = repo.get_git_ref(f"heads/{self.actual.reference}")
-            self.actual.reference_type = "branch"
-            self.actual.date = repo.get_commit(sha=ref.object.sha).commit.committer.date
-        except GithubException:
-            pass
-        else:
-            return
+        should_use_branch = self.recommended.date is None or (
+            self.actual.date is not None and self.recommended.date < self.actual.date
+        )
 
-        self.actual.reference_type = "bullshit"
-        self.actual.date = None
+        if should_use_branch:
+            self._set_recommended_to_branch(repo, branch_name)
+
+    def _set_recommended_reference_and_date_to_tag_if_exists(self, valid_semver_tags: list) -> None:
+        if valid_semver_tags:
+            recommended_tag = valid_semver_tags[0]
+            self.recommended.reference = recommended_tag.commit.sha
+            self.recommended.date = recommended_tag.commit.commit.committer.date
+            self.recommended.description = f"{recommended_tag.name}"
 
 
 class UniqGithubActions:
