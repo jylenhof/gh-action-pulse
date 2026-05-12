@@ -6,9 +6,9 @@ import re
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Literal
 
+import semver
 from github import Auth, Github
 from github.GithubException import GithubException
-from packaging.version import InvalidVersion, Version
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -146,17 +146,18 @@ class GithubAction:
                 self._set_recommended_for_sha(repo, valid_semver_tags)
             case "bullshit":
                 logger.error("Cannot recommend update for invalid reference type.")
+                raise SystemExit(1)
+            case _:
+                logger.error("Unknown reference type encountered, that should not happen.")
+                raise SystemExit(1)
 
     def _get_valid_semver_tags(self, repo: Repository) -> list:
         valid_semver_tags = []
         for tag in repo.get_tags():
-            try:
-                Version(tag.name)
+            clean_name = tag.name.lstrip("v")
+            if semver.Version.is_valid(clean_name):
                 valid_semver_tags.append(tag)
-            except InvalidVersion:
-                pass
-
-        valid_semver_tags.sort(key=lambda tag: Version(tag.name), reverse=True)
+        valid_semver_tags.sort(key=lambda tag: semver.Version.parse(tag.name.lstrip("v")), reverse=True)
         return valid_semver_tags
 
     def _set_recommended_for_sha(self, repo: Repository, valid_semver_tags: list) -> None:

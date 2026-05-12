@@ -2,11 +2,12 @@
 
 import datetime
 from pathlib import Path
+from typing import Literal
 from unittest.mock import MagicMock, patch
 
 import pytest
 from github.GithubException import GithubException
-from packaging.version import InvalidVersion
+from testfixtures import LogCapture, log_capture
 
 from gh_action_pulse.actions import GithubAction, UniqGithubActions
 
@@ -182,32 +183,13 @@ class TestGithubAction:
         mock_repo.get_git_ref.assert_any_call("heads/invalid-desc")
 
     @patch("gh_action_pulse.actions.Github")
-    def test__set_recommended_reference_type_and_date_call_invalid_version_exception(
-        self, mock_github_cls: MagicMock
-    ) -> None:
-        """Verify that _set_recommended_reference_and_date correctly handles invalid tags."""
-        action = GithubAction("actions/checkout", "v4")
-        action.actual.reference_type = "tag"
-        mock_repo = MagicMock()
-        mock_github_cls.return_value.get_repo.return_value = mock_repo
-        mock_tag_v4 = MagicMock()
-        mock_tag_v4.name = "v4.0.0"
-        mock_tag_invalid = MagicMock()
-        mock_tag_invalid.name = "invalid-tag"
-        mock_tag_v6 = MagicMock()
-        mock_tag_v6.name = "v6.0.0"
-        mock_tag_v6.commit.sha = "sha-for-v6"
-        mock_tag_v6.commit.commit.committer.date = datetime.datetime(2026, 1, 1, tzinfo=datetime.UTC)
-        mock_repo.get_tags.return_value = [mock_tag_v4, mock_tag_invalid, mock_tag_v6]
-
-        action._set_recommended_reference_and_date(mock_repo)
-
-        pytest.raises(InvalidVersion, match="Invalid version: 'invalid-tag'")
-
-    @patch("gh_action_pulse.actions.Github")
+    @patch("gh_action_pulse.actions.GithubAction._get_valid_semver_tags")
     @patch("gh_action_pulse.actions.GithubAction._set_recommended_reference_and_date_to_tag_if_exists")
     def test__set_recommended_reference_and_date_tag(
-        self, mock__set_recommended_reference_and_date_to_tag_if_exists: MagicMock, mock_github_cls: MagicMock
+        self,
+        mock__set_recommended_reference_and_date_to_tag_if_exists: MagicMock,
+        mock__get_valid_semver_tags: MagicMock,
+        mock_github_cls: MagicMock,
     ) -> None:
         """Verify that _set_recommended_reference_and_date calls the correct method when reference is a tag."""
         action = GithubAction("actions/checkout", "v4")
@@ -215,22 +197,23 @@ class TestGithubAction:
         mock_repo = MagicMock()
         mock_github_cls.return_value.get_repo.return_value = mock_repo
         mock_tag_v4 = MagicMock()
-        mock_tag_v4.name = "v4.0.0"
         mock_tag_v6 = MagicMock()
-        mock_tag_v6.name = "v6.0.0"
-        mock_tag_v6.commit.sha = "sha-for-v6"
-        mock_tag_v6.commit.commit.committer.date = datetime.datetime(2026, 1, 1, tzinfo=datetime.UTC)
-        mock_repo.get_tags.return_value = [mock_tag_v4, mock_tag_v6]
-        mock_list_sorted_tags: list[MagicMock] = [mock_tag_v6, mock_tag_v4]
+        mock__get_valid_semver_tags.return_value = [mock_tag_v6, mock_tag_v4]
+        mock_valid_semver_tags = mock__get_valid_semver_tags.return_value
 
         action._set_recommended_reference_and_date(mock_repo)
 
-        mock__set_recommended_reference_and_date_to_tag_if_exists.assert_called_once_with(mock_list_sorted_tags)
+        mock__get_valid_semver_tags.assert_called_once_with(mock_repo)
+        mock__set_recommended_reference_and_date_to_tag_if_exists.assert_called_once_with(mock_valid_semver_tags)
 
     @patch("gh_action_pulse.actions.Github")
+    @patch("gh_action_pulse.actions.GithubAction._get_valid_semver_tags")
     @patch("gh_action_pulse.actions.GithubAction._set_recommended_with_fallback")
     def test__set_recommended_reference_and_date_branch(
-        self, mock__set_recommended_with_fallback: MagicMock, mock_github_cls: MagicMock
+        self,
+        mock__set_recommended_with_fallback: MagicMock,
+        mock__get_valid_semver_tags: MagicMock,
+        mock_github_cls: MagicMock,
     ) -> None:
         """Verify that _set_recommended_reference_and_date calls the correct method when reference is a branch."""
         action = GithubAction("actions/checkout", "main")
@@ -238,126 +221,71 @@ class TestGithubAction:
         mock_repo = MagicMock()
         mock_github_cls.return_value.get_repo.return_value = mock_repo
         mock_tag_v4 = MagicMock()
-        mock_tag_v4.name = "v4.0.0"
         mock_tag_v6 = MagicMock()
-        mock_tag_v6.name = "v6.0.0"
-        mock_tag_v6.commit.sha = "sha-for-v6"
-        mock_tag_v6.commit.commit.committer.date = datetime.datetime(2026, 1, 1, tzinfo=datetime.UTC)
-        mock_branch = MagicMock()
-        mock_branch.commit.sha = "sha-for-main"
-        mock_branch.commit.commit.committer.date = datetime.datetime(2026, 1, 3, tzinfo=datetime.UTC)
-        mock_repo.get_branch.return_value = mock_branch
-        mock_repo.get_tags.return_value = [mock_tag_v6, mock_tag_v4]
-        mock_list_sorted_tags: list[MagicMock] = [mock_tag_v6, mock_tag_v4]
+        mock__get_valid_semver_tags.return_value = [mock_tag_v6, mock_tag_v4]
+        mock_valid_semver_tags = mock__get_valid_semver_tags.return_value
 
         action._set_recommended_reference_and_date(mock_repo)
 
-        mock__set_recommended_with_fallback.assert_called_once_with(mock_repo, mock_list_sorted_tags, "main")
+        mock__get_valid_semver_tags.assert_called_once_with(mock_repo)
+        mock__set_recommended_with_fallback.assert_called_once_with(mock_repo, mock_valid_semver_tags, "main")
 
     @patch("gh_action_pulse.actions.Github")
-    @patch.object(GithubAction, "_set_recommended_reference_and_date_to_tag_if_exists")
-    def test__set_recommended_reference_and_date_sha_description_tag(
-        self, mock__set_recommended_reference_and_date_to_tag_if_exists: MagicMock, mock_github_cls: MagicMock
-    ) -> None:
-        """Check that _set_recommended_reference_and_date calls the correct method when ref is a sha and desc is a tag."""
-        action = GithubAction("actions/checkout", "sha-for-v4", "v4.0.0")
-        action.actual.reference_type = "sha"
-        action.actual.description_type = "tag"
-        mock_repo = MagicMock()
-        mock_github_cls.return_value.get_repo.return_value = mock_repo
-        mock_tag_v4 = MagicMock()
-        mock_tag_v4.name = "v4.0.0"
-        mock_tag_v6 = MagicMock()
-        mock_tag_v6.name = "v6.0.0"
-        mock_tag_v6.commit.sha = "sha-for-v6"
-        mock_tag_v6.commit.commit.committer.date = datetime.datetime(2026, 1, 1, tzinfo=datetime.UTC)
-        mock_repo.get_tags.return_value = [mock_tag_v4, mock_tag_v6]
-        mock_list_sorted_tags: list[MagicMock] = [mock_tag_v6, mock_tag_v4]
-
-        action._set_recommended_reference_and_date(mock_repo)
-
-        mock__set_recommended_reference_and_date_to_tag_if_exists.assert_called_once_with(mock_list_sorted_tags)
-
-    @patch("gh_action_pulse.actions.Github")
-    @patch("gh_action_pulse.actions.GithubAction._set_recommended_with_fallback")
-    def test__set_recommended_reference_and_date_sha_description_branch(
-        self, mock__set_recommended_with_fallback: MagicMock, mock_github_cls: MagicMock
-    ) -> None:
-        """Check that _set_recommended_reference_and_date calls the correct method when ref is a sha and desc is a branch."""
-        action = GithubAction("actions/checkout", "sha-for-main", "main")
-        action.actual.reference_type = "sha"
-        action.actual.description_type = "branch"
-        mock_repo = MagicMock()
-        mock_github_cls.return_value.get_repo.return_value = mock_repo
-        mock_tag_v4 = MagicMock()
-        mock_tag_v4.name = "v4.0.0"
-        mock_tag_v6 = MagicMock()
-        mock_tag_v6.name = "v6.0.0"
-        mock_tag_v6.commit.sha = "sha-for-v6"
-        mock_tag_v6.commit.commit.committer.date = datetime.datetime(2026, 1, 1, tzinfo=datetime.UTC)
-        mock_branch = MagicMock()
-        mock_branch.commit.sha = "sha-for-main"
-        mock_branch.commit.commit.committer.date = datetime.datetime(2026, 1, 3, tzinfo=datetime.UTC)
-        mock_repo.get_branch.return_value = mock_branch
-        mock_repo.get_tags.return_value = [mock_tag_v6, mock_tag_v4]
-        mock_list_sorted_tags: list[MagicMock] = [mock_tag_v6, mock_tag_v4]
-
-        action._set_recommended_reference_and_date(mock_repo)
-
-        mock__set_recommended_with_fallback.assert_called_once_with(mock_repo, mock_list_sorted_tags, "sha-for-main")
-
-    @patch("gh_action_pulse.actions.Github")
-    @patch("gh_action_pulse.actions.GithubAction._set_recommended_to_branch")
-    def test__set_recommended_reference_and_date_sha_description_bullshit_sha_is_tag_related(
-        self, mock__set_recommended_to_branch: MagicMock, mock_github_cls: MagicMock
-    ) -> None:
-        """Check that _set_recommended_reference_and_date calls the correct method when ref is a sha and desc is bullshit."""
-        action = GithubAction("actions/checkout", "sha-for-v4", "bullshit-desc")
-        action.actual.reference_type = "sha"
-        action.actual.description_type = "bullshit"
-        mock_repo = MagicMock()
-        mock_github_cls.return_value.get_repo.return_value = mock_repo
-        mock_tag_v4 = MagicMock()
-        mock_tag_v4.name = "v4.0.0"
-        mock_tag_v4.commit.sha = "sha-for-v4"
-        mock_tag_v6 = MagicMock()
-        mock_tag_v6.name = "v6.0.0"
-        mock_tag_v6.commit.sha = "sha-for-v6"
-        mock_tag_v6.commit.commit.committer.date = datetime.datetime(2026, 1, 1, tzinfo=datetime.UTC)
-        mock_repo.get_tags.return_value = [mock_tag_v4, mock_tag_v6]
-
-        action._set_recommended_reference_and_date(mock_repo)
-
-        mock__set_recommended_to_branch.assert_not_called()
-
-    @patch("gh_action_pulse.actions.Github")
-    @patch("gh_action_pulse.actions.GithubAction._set_recommended_to_branch")
-    @patch("gh_action_pulse.actions.GithubAction._set_recommended_reference_and_date_to_tag_if_exists")
-    def test__set_recommended_reference_and_date_sha_description_bullshit_sha_is_branch_related(
+    @patch("gh_action_pulse.actions.GithubAction._get_valid_semver_tags")
+    @patch("gh_action_pulse.actions.GithubAction._set_recommended_for_sha")
+    def test__set_recommended_reference_and_date_sha(
         self,
-        mock__set_recommended_reference_and_date_to_tag_if_exists: MagicMock,
-        mock__set_recommended_to_branch: MagicMock,
+        mock__set_recommended_for_sha: MagicMock,
+        mock__get_valid_semver_tags: MagicMock,
         mock_github_cls: MagicMock,
     ) -> None:
-        """Check that _set_recommended_reference_and_date calls the correct method when ref is a sha and desc is bullshit."""
-        action = GithubAction("actions/checkout", "sha-for-main", "bullshit-desc")
+        """Check that _set_recommended_reference_and_date calls the correct method when reference is a sha."""
+        action = GithubAction("actions/checkout", "sha-for-v4", "v4.0.0")
         action.actual.reference_type = "sha"
-        action.actual.description_type = "bullshit"
         mock_repo = MagicMock()
         mock_github_cls.return_value.get_repo.return_value = mock_repo
         mock_tag_v4 = MagicMock()
-        mock_tag_v4.name = "v4.0.0"
-        mock_tag_v4.commit.sha = "sha-for-v4"
         mock_tag_v6 = MagicMock()
-        mock_tag_v6.name = "v6.0.0"
-        mock_tag_v6.commit.sha = "sha-for-v6"
-        mock_tag_v6.commit.commit.committer.date = datetime.datetime(2026, 1, 1, tzinfo=datetime.UTC)
-        mock_repo.get_tags.return_value = [mock_tag_v4, mock_tag_v6]
+        mock__get_valid_semver_tags.return_value = [mock_tag_v6, mock_tag_v4]
+        mock_valid_semver_tags = mock__get_valid_semver_tags.return_value
 
         action._set_recommended_reference_and_date(mock_repo)
 
-        mock__set_recommended_reference_and_date_to_tag_if_exists.assert_not_called()
-        mock__set_recommended_to_branch.assert_called_once_with(mock_repo, "sha-for-main")
+        mock__get_valid_semver_tags.assert_called_once_with(mock_repo)
+        mock__set_recommended_for_sha.assert_called_once_with(mock_repo, mock_valid_semver_tags)
+
+    @pytest.mark.parametrize(
+        ("reference_type", "error_message"),
+        [
+            ("bullshit", "Cannot recommend update for invalid reference type."),
+            (None, "Unknown reference type encountered, that should not happen."),
+        ],
+    )
+    @log_capture()
+    @patch("gh_action_pulse.actions.Github")
+    @patch("gh_action_pulse.actions.GithubAction._get_valid_semver_tags")
+    def test__set_recommended_reference_and_date_bullshit(
+        self,
+        mock__get_valid_semver_tags: MagicMock,
+        mock_github_cls: MagicMock,
+        capture: LogCapture,
+        reference_type: Literal["bullshit", "sha", "tag", "branch"] | None,
+        error_message: str,
+    ) -> None:
+        """Check that _set_recommended_reference_and_date calls the correct method when reference is bullshit."""
+        action = GithubAction("actions/checkout", "sha-for-main", "main")
+        action.actual.reference_type = reference_type
+        mock_repo = MagicMock()
+        mock_github_cls.return_value.get_repo.return_value = mock_repo
+        mock_tag_v4 = MagicMock()
+        mock_tag_v6 = MagicMock()
+        mock__get_valid_semver_tags.return_value = [mock_tag_v6, mock_tag_v4]
+
+        with pytest.raises(SystemExit):
+            action._set_recommended_reference_and_date(mock_repo)
+
+        mock__get_valid_semver_tags.assert_called_once_with(mock_repo)
+        capture.check(("gh_action_pulse.actions", "ERROR", error_message))
 
 
 class TestUniqGithubActions:
