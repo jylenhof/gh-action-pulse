@@ -176,7 +176,7 @@ class GithubAction:
                     self._set_recommended_to_branch(repo, self.actual.reference)
 
     def _actual_sha_matches_tag(self, repo: Repository) -> bool:
-        return any(tag.commit.sha == self.actual.reference for tag in repo.get_tags())
+        return any(tag.commit.commit.sha == self.actual.reference for tag in repo.get_tags())
 
     def _set_recommended_to_branch(self, repo: Repository, branch_name: str) -> None:
         """Sets the recommendation to the latest commit of a specific branch."""
@@ -186,7 +186,7 @@ class GithubAction:
             self.recommended.date = branch.commit.commit.committer.date
             self.recommended.description = branch_name
         except GithubException:
-            pass
+            logger.exception("Failed to fetch branch '%s', that should not happen.", branch_name)
 
     def _set_recommended_with_fallback(self, repo: Repository, valid_tags: list, branch_name: str) -> None:
         """Tries to recommend the latest tag, falling back to a branch if the tag is older than the current pin."""

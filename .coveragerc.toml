@@ -1,6 +1,7 @@
 # You can also use sections like [tool.coverage.run]
 [run]
 branch = true
+omit = ["tests/*", "*__init__.py"]
 
 [report]
 # Regexes for lines to exclude from consideration

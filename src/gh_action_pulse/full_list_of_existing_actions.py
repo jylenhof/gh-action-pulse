@@ -13,6 +13,7 @@ class FullListOfExistingActions:
     def __init__(self, search_configs: list[tuple[Path, str]]) -> None:
         """Initialize the model and scan for 'uses:' statements."""
         self._full_list: dict[Path, list[dict[int, str]]] = {}
+
         self._scan_for_actions(search_configs)
 
     def _scan_for_actions(self, search_configs: list[tuple[Path, str]]) -> None:

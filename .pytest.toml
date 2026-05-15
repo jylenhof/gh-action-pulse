@@ -8,7 +8,7 @@ addopts = [
   "--cov",
   "--cov-report=lcov:lcov.info",
   "--cov-report=term",
-  "--cov-fail-under=60",  # To be bumped to 80 at least
+  "--cov-fail-under=80",
 ]
 pythonpath = ["src"]
 testpaths = ["tests"]
