@@ -40,6 +40,9 @@ class TestGithubAction:
         assert a1 != a3
         assert len({a1, a2}) == 1
 
+        # Coverage for line 73: comparison with a different type
+        assert a1 != "not a GithubAction"
+
     @patch("gh_action_pulse.actions.Github")
     @patch("gh_action_pulse.actions.GithubAction._set_actual_reference_type_and_date")
     @patch("gh_action_pulse.actions.GithubAction._set_actual_description_type")
@@ -84,11 +87,13 @@ class TestGithubAction:
     @patch("gh_action_pulse.actions.Github")
     def test__set_actual_reference_type_and_date_with_sha(self, mock_github_cls: MagicMock) -> None:
         """Verify that _set_actual_reference_type_and_date correctly identifies the reference type and date."""
-        action = GithubAction("actions/checkout", "sha-for-v4")
+        # Use a specific SHA to ensure the comparison on line 72 is True
+        target_sha = "a1b2c3d4e5f6g7h8i9j0"
+        action = GithubAction("actions/checkout", target_sha)
         mock_repo = MagicMock()
         mock_github_cls.return_value.get_repo.return_value = mock_repo
         mock_sha_v4 = MagicMock()
-        mock_sha_v4.commit.commit.sha = "sha-for-v4"
+        mock_sha_v4.commit.commit.sha = target_sha
         mock_sha_v4.commit.commit.committer.date = datetime.datetime(2025, 1, 3, tzinfo=datetime.UTC)
         mock_repo.get_commit.return_value = mock_sha_v4.commit
 
@@ -97,8 +102,8 @@ class TestGithubAction:
         assert action.actual.reference_type == "sha"
         assert action.actual.date == datetime.datetime(2025, 1, 3, tzinfo=datetime.UTC)
         assert mock_repo.get_commit.call_count == 1
-        mock_repo.get_commit.assert_called_once_with(sha="sha-for-v4")
-        mock_repo.get_git_ref("heads/sha-for-v4").assert_not_called()
+        mock_repo.get_commit.assert_called_once_with(sha=target_sha)
+        mock_repo.get_git_ref(f"heads/{target_sha}").assert_not_called()
 
     @patch("gh_action_pulse.actions.Github")
     def test__set_actual_reference_type_and_date_with_branch(self, mock_github_cls: MagicMock) -> None:
@@ -550,6 +555,35 @@ class TestUniqGithubActions:
         uniq.init_from_full_list(full_list=full_list)
         assert len(uniq._actions) == 3
 
+    def test_init_from_full_list_with_mixed_content(self) -> None:
+        """Verify that valid actions are parsed and invalid ones (like local actions) are skipped."""
+        full_list = {
+            Path("test.yml"): [
+                {1: "uses: actions/checkout@v4"},  # Valid: matches regex
+                {2: "uses: ./local-action"},  # Invalid: missing @, should be skipped
+            ]
+        }
+        uniq = UniqGithubActions()
+        uniq.init_from_full_list(full_list)
+        # Covers the False branch of the regex match and ensures line 245 is hit for the valid one
+        assert len(uniq.get_actions()) == 1
+
+    def test_init_from_full_list_empty(self) -> None:
+        """Verify that initialization with an empty list handles the loop exit branches correctly."""
+        uniq = UniqGithubActions()
+        # Test with empty outer dict
+        uniq.init_from_full_list({})
+        assert len(uniq.get_actions()) == 0
+
+        # Test with empty inner lists
+        uniq.init_from_full_list({Path("empty.yml"): []})
+        assert len(uniq.get_actions()) == 0
+
+    def test_get_fully_qualified_empty(self) -> None:
+        """Verify get_fully_qualified returns an empty set if no actions are present."""
+        uniq = UniqGithubActions()
+        assert uniq.get_fully_qualified() == set()
+
     def test_add(self) -> None:
         """Verify that adding a GithubAction stores it in the unique actions collection."""
         uniq = UniqGithubActions()
@@ -566,6 +600,32 @@ class TestUniqGithubActions:
         assert len(actions) == 1
         # Convert to list to access by index
         assert next(iter(actions)).name == "actions/checkout"
+
+    def test___getitem__(self) -> None:
+        """Verify that __getitem__ allows indexing into the set of actions and handles out-of-bounds."""
+        uniq = UniqGithubActions()
+        a1 = GithubAction("actions/checkout", "v4.0.0", "v4.0.0")
+        a2 = GithubAction("actions/setup-python", "v5", None)
+        uniq.add(a1)
+        uniq.add(a2)
+
+        # Ensure the two added actions are present when indexed
+        # The order of elements when converting a set to a list is not guaranteed.
+        # So, we check for membership rather than strict equality at a specific index.
+        retrieved_0 = uniq[0]
+        retrieved_1 = uniq[1]
+
+        assert retrieved_0 in [a1, a2]
+        assert retrieved_1 in [a1, a2]
+        assert retrieved_0 != retrieved_1  # Ensure different actions are retrieved
+
+        # Test out-of-bounds positive index
+        with pytest.raises(IndexError):
+            _ = uniq[2]
+
+        # Test out-of-bounds negative index
+        with pytest.raises(IndexError):
+            _ = uniq[-3]
 
     @patch("gh_action_pulse.actions.GithubAction.get_fully_qualified")
     def test_get_fully_qualified_contents(self, mock_get_fq: MagicMock) -> None:
