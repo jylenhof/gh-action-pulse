@@ -27,9 +27,7 @@ uv tool install . --force --reinstall
 
 Randoms items
 
-- Strengthen pre-commit
-- Add unit tests
-- Separate unit tests with appropriate workflow (pytest)
+- Maybe Separate unit tests with appropriate workflow (pytest)
 - add check about GITHUB_TOKEN variable availability
 - Add E2E tests with appropriate workflow (pytest and/or bats)
 - Push wheel to pypi when sufficient interest/stability
