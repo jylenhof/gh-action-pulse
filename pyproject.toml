@@ -9,10 +9,11 @@ dependencies = [
   "packaging>=26.1",
   "pygithub>=2.9.0",
   "semver>=3.0.4",
+  "typer>=0.25.1",
 ]
 
 [project.scripts]
-gh-action-pulse = "gh_action_pulse.main:main"
+gh-action-pulse = "gh_action_pulse.main:app"
 
 [dependency-groups]
 dev = [

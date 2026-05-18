@@ -10,7 +10,6 @@ import semver
 from github import Auth, Github
 from github.GithubException import GithubException
 
-logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
@@ -74,12 +73,34 @@ class GithubAction:
 
     def get_fully_qualified(self) -> GithubAction:
         """Fetch metadata from GitHub API to determine the type and dates of references."""
+        logger.info(
+            "Looking for actual and recommended metadata for action: '%s' with reference: '%s' and description: '%s'",
+            self.name,
+            self.actual.reference,
+            self.actual.description,
+        )
         auth = Auth.Token(os.environ["GITHUB_TOKEN"])
         g = Github(auth=auth)
-        repo = g.get_repo(self.name)
+        logger.debug("Get Repo access to %s", self.name)
+        repo = g.get_repo(self.name)  # missing exception catch here
         self._set_actual_reference_type_and_date(repo)
+        logger.info("actual reference type is %s at date %s", self.actual.reference_type, self.actual.date)
         self._set_actual_description_type(repo)
+        logger.info("actual description type is %s", self.actual.description_type)
         self._set_recommended_reference_and_date(repo)
+        logger.info(
+            "recommendation is ref: %s at date: %s with description:%s",
+            self.recommended.reference,
+            self.recommended.date,
+            self.recommended.description,
+        )
+        logger.info(
+            "Completed actual and recommended metadata retrieval for action: '%s' with reference: '%s'"
+            "and description: '%s'\n",
+            self.name,
+            self.actual.reference,
+            self.actual.description,
+        )
         return self
 
     def _set_actual_reference_type_and_date(self, repo: Repository) -> None:
@@ -218,6 +239,7 @@ class UniqGithubActions:
         """Parse action references from a scanned list of file matches."""
         action_pattern = re.compile(r"^\s*[-]?\s{0,1}uses:\s*([^@\s]+)@([^\s#]+)(?:\s+#\s+(.+))?")
 
+        logger.info("Parsing action references from scanned files with de-duplication...")
         for matches in full_list.values():
             for match_dict in matches:
                 for line in match_dict.values():
@@ -225,12 +247,19 @@ class UniqGithubActions:
                         name: str = match.group(1)
                         reference: str = match.group(2)
                         actual_description: str | None = match.group(3) if match.group(3) is not None else None
+                        logger.info(  # Maybe move this to debug level
+                            "Found action \n=>name: %s \n=>reference: %s \n=>actual description: %s",
+                            name,
+                            reference,
+                            actual_description,
+                        )
                         action = GithubAction(
                             name=name,
                             reference=reference,
                             actual_description=actual_description,
                         )
                         self.add(action)
+        logger.info("Finished parsing action references. Total unique actions found: %d\n", len(self._actions))
 
     def add(self, action: GithubAction) -> None:
         """Add a unique GithubAction to the collection."""

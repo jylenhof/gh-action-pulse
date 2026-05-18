@@ -1,17 +1,40 @@
 """This script scans GitHub Actions workflow and action definition files for 'uses:' statements."""
 
 import logging
+from enum import StrEnum
+from typing import Annotated
+
+import typer
 
 from gh_action_pulse.actions import UniqGithubActions
 from gh_action_pulse.full_list_of_existing_actions import FullListOfExistingActions
 from gh_action_pulse.helpers.constants import SEARCH_CONFIGS
 
 logger = logging.getLogger(__name__)
+app = typer.Typer()
 
 
-def main() -> None:
+class LogLevel(StrEnum):
+    """Logging levels supported by the CLI."""
+
+    DEBUG = "DEBUG"
+    INFO = "INFO"
+    WARNING = "WARNING"
+    ERROR = "ERROR"
+    CRITICAL = "CRITICAL"
+
+
+@app.command(help="Scan for 'uses:' statements in GitHub Actions workflow and action definition files.")
+def main(
+    log_level: Annotated[
+        LogLevel,
+        typer.Option(
+            "--log_level", help="Set the logging level (e.g., DEBUG, INFO, WARNING, ERROR, CRITICAL)", show_default=True
+        ),
+    ] = LogLevel.INFO,
+) -> None:
     """Main function to scan for 'uses:' statements and analyze them."""
-    logging.basicConfig(level=logging.INFO, format="%(message)s")
+    logging.basicConfig(level=getattr(logging, log_level), format="%(message)s")
     full_list_of_existing_actions = FullListOfExistingActions(
         search_configs=SEARCH_CONFIGS,
     )
@@ -20,32 +43,9 @@ def main() -> None:
     uniq_github_actions = UniqGithubActions()
     uniq_github_actions.init_from_full_list(results)
 
-    logger.info("results: %s", results)
-
     uniq_github_actions.get_fully_qualified()
-    for action in uniq_github_actions.get_actions():
-        action_name = action.name
-        reference = action.actual.reference
-        actual_description_version = action.actual.description or ""
-        actual_description_type = action.actual.description_type
-        actual_reference_type = action.actual.reference_type
-        actual_date = action.actual.date
-        recommended_reference = action.recommended.reference
-        recommended_reference_date = action.recommended.date
-        recommended_description = action.recommended.description
-
-        logger.info("Action: %s", action_name)
-        logger.info("actual_reference_type: %s", actual_reference_type)
-        logger.info("actual_reference: %s", reference)
-        logger.info("actual_description_version: %s", actual_description_version)
-        logger.info("actual_description_type: %s", actual_description_type)
-        logger.info("actual_date: %s", actual_date)
-        logger.info("recommended_reference: %s", recommended_reference)
-        logger.info("recommended_reference_date: %s", recommended_reference_date)
-        logger.info("recommended_description: %s", recommended_description)
-        logger.info("----")
 
 
 # Run the main function when the script is executed directly (useful for vscode debugger)
 if __name__ == "__main__":
-    main()
+    app()
