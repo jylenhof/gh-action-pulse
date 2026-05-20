@@ -39,6 +39,10 @@ class Recommendation:
     description: str | None = None
 
 
+class GithubActionNotFoundError(Exception):
+    """Exception raised when a GitHub Action cannot be found."""
+
+
 class GithubAction:
     """Represents a GitHub Action reference found in workflow or action files."""
 
@@ -272,6 +276,13 @@ class UniqGithubActions:
     def __getitem__(self, index: int) -> GithubAction:
         """Allow indexing into the set of actions."""
         return list(self._actions)[index]
+
+    def get_item(self, name: str, reference: str, description: str | None) -> GithubAction:
+        """Look for GithubAction which is named name with 'reference' reference and has 'description' description."""
+        for i in self._actions:
+            if i.name == name and i.actual.reference == reference and i.actual.description == description:
+                return i
+        raise GithubActionNotFoundError
 
     def get_fully_qualified(self) -> set[GithubAction]:
         """Update all actions in the collection with metadata from the GitHub API."""

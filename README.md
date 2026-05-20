@@ -37,8 +37,8 @@ Randoms items
 - Be able to pass the local emplacement of repo (today need to be in a local repository clone)
 - Maybe configuration file with some ignore parameters or specific rules for some workflows
 - Maybe implement typer to be able to pass some parameters
-- Better logging
 - Implement release please
+- Check eventual redirection of action to update to new URL
 
 ## CONTRIBUTING
 

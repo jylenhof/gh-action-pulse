@@ -9,7 +9,7 @@ import pytest
 from github.GithubException import GithubException
 from testfixtures import LogCapture, log_capture
 
-from gh_action_pulse.actions import GithubAction, UniqGithubActions
+from gh_action_pulse.actions import GithubAction, GithubActionNotFoundError, UniqGithubActions
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -626,6 +626,29 @@ class TestUniqGithubActions:
         # Test out-of-bounds negative index
         with pytest.raises(IndexError):
             _ = uniq[-3]
+
+    def test_get_item_found(self) -> None:
+        """Verify that __getitem__ allows indexing into the set of actions and handles out-of-bounds."""
+        uniq_actions = UniqGithubActions()
+        a1 = GithubAction("actions/checkout", "v4.0.0", "v4.0.0")
+        a2 = GithubAction("actions/setup-python", "v5", None)
+        uniq_actions.add(a1)
+        uniq_actions.add(a2)
+
+        result = uniq_actions.get_item(name="actions/checkout", reference="v4.0.0", description="v4.0.0")
+
+        assert result == a1
+
+    def test_get_item_not_found(self) -> None:
+        """Verify that __getitem__ allows indexing into the set of actions and handles out-of-bounds."""
+        uniq_actions = UniqGithubActions()
+        a1 = GithubAction("actions/checkout", "v4.0.0", "v4.0.0")
+        a2 = GithubAction("actions/setup-python", "v5", None)
+        uniq_actions.add(a1)
+        uniq_actions.add(a2)
+
+        with pytest.raises(GithubActionNotFoundError):
+            uniq_actions.get_item(name="actions/checkout", reference="v6.0.0", description="v4.0.0")
 
     @patch("gh_action_pulse.actions.GithubAction.get_fully_qualified")
     def test_get_fully_qualified_contents(self, mock_get_fq: MagicMock) -> None:
