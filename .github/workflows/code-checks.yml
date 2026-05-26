@@ -10,7 +10,7 @@ on:
       - main
     types: [opened, synchronize, reopened, ready_for_review]
   release:
-    types: [published,released,prereleased]
+    types: [published]
   workflow_dispatch:
     inputs:
       force_release:
