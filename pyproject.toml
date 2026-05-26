@@ -1,14 +1,17 @@
 [project]
 name = "gh-action-pulse"
-version = "0.1.0"
 description = "Get Health/Propose modifications of each GitHub Action in a repository"
 readme = "README.md"
 requires-python = ">=3.14"
 authors = [{ name = "Jean-Yves LENHOF", email = "jygithub@lenhof.eu.org" }]
+urls = { "repository" = "https://github.com/jylenhof/gh-action-pulse" }
 dependencies = [
   "pygithub>=2.9.0,<3.0.0",
   "semver>=3.0.4,<4.0.0",
   "typer>=0.25.1,<0.26.0",
+]
+dynamic = [
+  "version",
 ]
 
 [project.scripts]
@@ -31,8 +34,22 @@ dev = [
 ]
 
 [build-system]
-requires = ["uv_build>=0.11.5,<0.12.0"]
-build-backend = "uv_build"
+requires = [
+  "hatchling",
+  "versioningit>=3.1.2",
+]
+build-backend = "hatchling.build"
+
+[tool.hatch.version]
+source = "versioningit"
+
+[tool.hatch.build.targets.wheel]
+include = [
+  "src/gh_action_pulse",
+]
+
+[tool.hatch.build.targets.wheel.sources]
+"src/gh_action_pulse" = "gh_action_pulse"
 
 [tool.ty.src]
 include = [
@@ -42,3 +59,21 @@ include = [
 
 [tool.uv]
 add-bounds = "major"
+
+[tool.versioningit]
+default-version = "0.0.0.dev0+0"
+
+[tool.versioningit.vcs]
+default-tag = "v0.0.0"
+
+[tool.versioningit.format]
+# Format used when there have been commits since the most recent tag:
+distance = "{next_version}.dev{distance}"
+# Example formatted version: 1.2.3.post42+ge174a1f
+
+# Format used when there are uncommitted changes:
+dirty = "{base_version}+dirty{build_date:%Y%m%d}"
+# Example formatted version: 1.2.3+d20230922
+
+# Format used when there are both commits and uncommitted changes:
+distance-dirty = "{next_version}.dev{distance}+{vcs}{rev}.d{build_date:%Y%m%d}"
