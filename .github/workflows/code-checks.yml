@@ -51,7 +51,7 @@ jobs:
           MISE_INSTALL_FROM_GITHUB: 1
         with:
           cache: false
-          version: ${{ vars.MISE_VERSION || 'latest'}}
+          version: ${{ vars.MISE_VERSION }}
 
       - name: Run prek checks
         env:
@@ -90,7 +90,7 @@ jobs:
           MISE_INSTALL_FROM_GITHUB: 1
         with:
           cache: false
-          version: ${{ vars.MISE_VERSION || 'latest'}}
+          version: ${{ vars.MISE_VERSION }}
 
       - name: Build wheel distribution file
         run: |
