@@ -2,8 +2,11 @@ name: Commit Check
 
 on:
   push:
+    branches:
+      - main
   pull_request:
-    branches: 'main'
+    branches:
+      - main
 
 jobs:
   commit-check:

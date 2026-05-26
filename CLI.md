@@ -1,9 +1,5 @@
 # Cli to implement
 
---log-level
-
---dry-run
-
 --workflow-omit
 
 --only-workflow
