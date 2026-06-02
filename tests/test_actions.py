@@ -43,21 +43,21 @@ class TestGithubAction:
         # Coverage for line 73: comparison with a different type
         assert a1 != "not a GithubAction"
 
-    @patch("gh_action_pulse.actions.Github")
     @patch("gh_action_pulse.actions.GithubAction._set_actual_reference_type_and_date")
     @patch("gh_action_pulse.actions.GithubAction._set_actual_description_type")
     @patch("gh_action_pulse.actions.GithubAction._set_recommended_reference_and_date")
     def test_get_fully_qualified(
-        self, mock_set_rec: MagicMock, mock_set_desc: MagicMock, mock_set_actual: MagicMock, mock_github_cls: MagicMock
+        self, mock_set_rec: MagicMock, mock_set_desc: MagicMock, mock_set_actual: MagicMock
     ) -> None:
         """Test that get_fully_qualified correctly orchestrates the internal logic to populate all fields."""
         # GIVEN
         action = GithubAction("actions/checkout", "v4")
+        mock_g = MagicMock()
         mock_repo = MagicMock()
-        mock_github_cls.return_value.get_repo.return_value = mock_repo
+        mock_g.get_repo.return_value = mock_repo
 
         # WHEN
-        result = action.get_fully_qualified()
+        result = action.get_fully_qualified(mock_g)
 
         # THEN
         assert result is action
@@ -65,12 +65,10 @@ class TestGithubAction:
         mock_set_desc.assert_called_once()
         mock_set_rec.assert_called_once()
 
-    @patch("gh_action_pulse.actions.Github")
-    def test__set_actual_reference_type_and_date_with_tag(self, mock_github_cls: MagicMock) -> None:
+    def test__set_actual_reference_type_and_date_with_tag(self) -> None:
         """Verify that _set_actual_reference_type_and_date correctly identifies the reference type and date."""
         action = GithubAction("actions/checkout", "v4")
         mock_repo = MagicMock()
-        mock_github_cls.return_value.get_repo.return_value = mock_repo
         mock_tag_v4 = MagicMock()
         mock_tag_v4.commit.commit.sha = "sha-for-v4"
         mock_tag_v4.commit.commit.committer.date = datetime.datetime(2025, 1, 3, tzinfo=datetime.UTC)
@@ -84,14 +82,12 @@ class TestGithubAction:
         mock_repo.get_commit.assert_called_once_with(sha="v4")
         mock_repo.get_git_ref("heads/v4").assert_not_called()
 
-    @patch("gh_action_pulse.actions.Github")
-    def test__set_actual_reference_type_and_date_with_sha(self, mock_github_cls: MagicMock) -> None:
+    def test__set_actual_reference_type_and_date_with_sha(self) -> None:
         """Verify that _set_actual_reference_type_and_date correctly identifies the reference type and date."""
         # Use a specific SHA to ensure the comparison on line 72 is True
         target_sha = "a1b2c3d4e5f6g7h8i9j0"
         action = GithubAction("actions/checkout", target_sha)
         mock_repo = MagicMock()
-        mock_github_cls.return_value.get_repo.return_value = mock_repo
         mock_sha_v4 = MagicMock()
         mock_sha_v4.commit.commit.sha = target_sha
         mock_sha_v4.commit.commit.committer.date = datetime.datetime(2025, 1, 3, tzinfo=datetime.UTC)
@@ -105,13 +101,10 @@ class TestGithubAction:
         mock_repo.get_commit.assert_called_once_with(sha=target_sha)
         mock_repo.get_git_ref(f"heads/{target_sha}").assert_not_called()
 
-    @patch("gh_action_pulse.actions.Github")
-    def test__set_actual_reference_type_and_date_with_branch(self, mock_github_cls: MagicMock) -> None:
+    def test__set_actual_reference_type_and_date_with_branch(self) -> None:
         """Verify that _set_actual_reference_type_and_date correctly identifies the reference type and date."""
         action = GithubAction("actions/checkout", "main")
         mock_repo = MagicMock()
-        mock_github_cls.return_value.get_repo.return_value = mock_repo
-        mock_github_cls.return_value.get_repo.return_value = mock_repo
         mock_branch = MagicMock()
         mock_branch.commit.commit.sha = "sha-for-main"
         mock_branch.commit.commit.committer.date = datetime.datetime(2025, 1, 3, tzinfo=datetime.UTC)
@@ -125,13 +118,10 @@ class TestGithubAction:
         assert mock_repo.get_commit.call_count == 2
         mock_repo.get_git_ref.assert_called_once_with("heads/main")
 
-    @patch("gh_action_pulse.actions.Github")
-    def test__set_actual_reference_type_and_date_with_invalid_ref(self, mock_github_cls: MagicMock) -> None:
+    def test__set_actual_reference_type_and_date_with_invalid_ref(self) -> None:
         """Verify that _set_actual_reference_type_and_date correctly handles invalid references."""
         action = GithubAction("actions/checkout", "invalid-ref")
         mock_repo = MagicMock()
-        mock_github_cls.return_value.get_repo.return_value = mock_repo
-        mock_github_cls.return_value.get_repo.return_value = mock_repo
         mock_repo.get_commit.side_effect = GithubException(404, "Not Found", None)
         mock_repo.get_git_ref.side_effect = GithubException(404, "Not Found", None)
 
@@ -143,24 +133,20 @@ class TestGithubAction:
         mock_repo.get_commit.assert_called_once_with(sha="invalid-ref")
         mock_repo.get_git_ref.assert_called_once_with("heads/invalid-ref")
 
-    @patch("gh_action_pulse.actions.Github")
-    def test__set_actual_description_type_with_none(self, mock_github_cls: MagicMock) -> None:
+    def test__set_actual_description_type_with_none(self) -> None:
         """Verify that _set_actual_description_type correctly handles None description."""
         action = GithubAction("actions/checkout", "v4", None)
         mock_repo = MagicMock()
-        mock_github_cls.return_value.get_repo.return_value = mock_repo
 
         action._set_actual_description_type(mock_repo)
 
         assert action.actual.description_type is None
         mock_repo.get_git_ref.assert_not_called()
 
-    @patch("gh_action_pulse.actions.Github")
-    def test__set_actual_description_type_with_tag(self, mock_github_cls: MagicMock) -> None:
+    def test__set_actual_description_type_with_tag(self) -> None:
         """Verify that _set_actual_description_type correctly identifies a tag description."""
         action = GithubAction("actions/checkout", "v4", "v4.0.0")
         mock_repo = MagicMock()
-        mock_github_cls.return_value.get_repo.return_value = mock_repo
         mock_repo.get_git_ref.return_value = MagicMock()  # Simulate tag exists
 
         action._set_actual_description_type(mock_repo)
@@ -168,12 +154,10 @@ class TestGithubAction:
         assert action.actual.description_type == "tag"
         mock_repo.get_git_ref.assert_called_once_with("tags/v4.0.0")
 
-    @patch("gh_action_pulse.actions.Github")
-    def test__set_actual_description_type_with_branch(self, mock_github_cls: MagicMock) -> None:
+    def test__set_actual_description_type_with_branch(self) -> None:
         """Verify that _set_actual_description_type correctly identifies a branch description."""
         action = GithubAction("actions/checkout", "v4", "main")
         mock_repo = MagicMock()
-        mock_github_cls.return_value.get_repo.return_value = mock_repo
         mock_repo.get_git_ref.return_value = MagicMock()  # Simulate branch exists
         mock_repo.get_git_ref.side_effect = [
             GithubException(404, "Not Found", None),
@@ -187,12 +171,10 @@ class TestGithubAction:
         mock_repo.get_git_ref.assert_any_call("tags/main")
         mock_repo.get_git_ref.assert_any_call("heads/main")
 
-    @patch("gh_action_pulse.actions.Github")
-    def test__set_actual_description_type_with_invalid_ref(self, mock_github_cls: MagicMock) -> None:
+    def test__set_actual_description_type_with_invalid_ref(self) -> None:
         """Verify that _set_actual_description_type correctly handles invalid description references."""
         action = GithubAction("actions/checkout", "v4", "invalid-desc")
         mock_repo = MagicMock()
-        mock_github_cls.return_value.get_repo.return_value = mock_repo
         mock_repo.get_git_ref.side_effect = GithubException(404, "Not Found", None)
 
         action._set_actual_description_type(mock_repo)
@@ -202,20 +184,17 @@ class TestGithubAction:
         mock_repo.get_git_ref.assert_any_call("tags/invalid-desc")
         mock_repo.get_git_ref.assert_any_call("heads/invalid-desc")
 
-    @patch("gh_action_pulse.actions.Github")
     @patch("gh_action_pulse.actions.GithubAction._get_valid_semver_tags")
     @patch("gh_action_pulse.actions.GithubAction._set_recommended_reference_and_date_to_tag_if_exists")
     def test__set_recommended_reference_and_date_tag(
         self,
         mock__set_recommended_reference_and_date_to_tag_if_exists: MagicMock,
         mock__get_valid_semver_tags: MagicMock,
-        mock_github_cls: MagicMock,
     ) -> None:
         """Verify that _set_recommended_reference_and_date calls the correct method when reference is a tag."""
         action = GithubAction("actions/checkout", "v4")
         action.actual.reference_type = "tag"
         mock_repo = MagicMock()
-        mock_github_cls.return_value.get_repo.return_value = mock_repo
         mock_tag_v4 = MagicMock()
         mock_tag_v6 = MagicMock()
         mock__get_valid_semver_tags.return_value = [mock_tag_v6, mock_tag_v4]
@@ -226,20 +205,17 @@ class TestGithubAction:
         mock__get_valid_semver_tags.assert_called_once_with(mock_repo)
         mock__set_recommended_reference_and_date_to_tag_if_exists.assert_called_once_with(mock_valid_semver_tags)
 
-    @patch("gh_action_pulse.actions.Github")
     @patch("gh_action_pulse.actions.GithubAction._get_valid_semver_tags")
     @patch("gh_action_pulse.actions.GithubAction._set_recommended_with_fallback")
     def test__set_recommended_reference_and_date_branch(
         self,
         mock__set_recommended_with_fallback: MagicMock,
         mock__get_valid_semver_tags: MagicMock,
-        mock_github_cls: MagicMock,
     ) -> None:
         """Verify that _set_recommended_reference_and_date calls the correct method when reference is a branch."""
         action = GithubAction("actions/checkout", "main")
         action.actual.reference_type = "branch"
         mock_repo = MagicMock()
-        mock_github_cls.return_value.get_repo.return_value = mock_repo
         mock_tag_v4 = MagicMock()
         mock_tag_v6 = MagicMock()
         mock__get_valid_semver_tags.return_value = [mock_tag_v6, mock_tag_v4]
@@ -250,20 +226,17 @@ class TestGithubAction:
         mock__get_valid_semver_tags.assert_called_once_with(mock_repo)
         mock__set_recommended_with_fallback.assert_called_once_with(mock_repo, mock_valid_semver_tags, "main")
 
-    @patch("gh_action_pulse.actions.Github")
     @patch("gh_action_pulse.actions.GithubAction._get_valid_semver_tags")
     @patch("gh_action_pulse.actions.GithubAction._set_recommended_for_sha")
     def test__set_recommended_reference_and_date_sha(
         self,
         mock__set_recommended_for_sha: MagicMock,
         mock__get_valid_semver_tags: MagicMock,
-        mock_github_cls: MagicMock,
     ) -> None:
         """Check that _set_recommended_reference_and_date calls the correct method when reference is a sha."""
         action = GithubAction("actions/checkout", "sha-for-v4", "v4.0.0")
         action.actual.reference_type = "sha"
         mock_repo = MagicMock()
-        mock_github_cls.return_value.get_repo.return_value = mock_repo
         mock_tag_v4 = MagicMock()
         mock_tag_v6 = MagicMock()
         mock__get_valid_semver_tags.return_value = [mock_tag_v6, mock_tag_v4]
@@ -282,12 +255,10 @@ class TestGithubAction:
         ],
     )
     @log_capture()
-    @patch("gh_action_pulse.actions.Github")
     @patch("gh_action_pulse.actions.GithubAction._get_valid_semver_tags")
     def test__set_recommended_reference_and_date_bullshit(
         self,
         mock__get_valid_semver_tags: MagicMock,
-        mock_github_cls: MagicMock,
         capture: LogCapture,
         reference_type: Literal["bullshit", "sha", "tag", "branch"] | None,
         error_message: str,
@@ -296,7 +267,6 @@ class TestGithubAction:
         action = GithubAction("actions/checkout", "sha-for-main", "main")
         action.actual.reference_type = reference_type
         mock_repo = MagicMock()
-        mock_github_cls.return_value.get_repo.return_value = mock_repo
         mock_tag_v4 = MagicMock()
         mock_tag_v6 = MagicMock()
         mock__get_valid_semver_tags.return_value = [mock_tag_v6, mock_tag_v4]
@@ -524,13 +494,13 @@ class TestUniqGithubActions:
         a1 = GithubAction(name, version, description)
         uniq.add(a1)
 
-        def mock_impl() -> GithubAction:
+        def mock_impl(_: MagicMock) -> GithubAction:
             a1.recommended.date = datecommit
             return a1
 
         mock_get_fq.side_effect = mock_impl
 
-        fully_qualified_actions = uniq.get_fully_qualified()
+        fully_qualified_actions = uniq.get_fully_qualified(MagicMock())
         assert len(fully_qualified_actions) == 1
         # Convert to list to access by index, or iterate.
         # Since we expect only one, converting to list and taking the first element is acceptable.
@@ -582,7 +552,7 @@ class TestUniqGithubActions:
     def test_get_fully_qualified_empty(self) -> None:
         """Verify get_fully_qualified returns an empty set if no actions are present."""
         uniq = UniqGithubActions()
-        assert uniq.get_fully_qualified() == set()
+        assert uniq.get_fully_qualified(MagicMock()) == set()
 
     def test_add(self) -> None:
         """Verify that adding a GithubAction stores it in the unique actions collection."""
@@ -661,7 +631,7 @@ class TestUniqGithubActions:
 
         mock_get_fq.side_effect = [a1, a2]
 
-        fully_qualified_actions = uniq.get_fully_qualified()
+        fully_qualified_actions = uniq.get_fully_qualified(MagicMock())
         assert len(fully_qualified_actions) == 2
 
         # Convert to list for iteration, and find specific actions by name

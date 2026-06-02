@@ -7,10 +7,12 @@ from pathlib import Path
 from typing import Annotated
 
 import typer
+from github import Auth, Github
 
 from gh_action_pulse.actions import UniqGithubActions
 from gh_action_pulse.full_list_of_existing_actions import FullListOfExistingActions
 from gh_action_pulse.helpers.constants import SEARCH_CONFIGS
+from gh_action_pulse.helpers.github import get_github_token
 
 logger = logging.getLogger(__name__)
 app = typer.Typer()
@@ -48,6 +50,15 @@ def main(
 ) -> None:
     """Main function to scan for 'uses:' statements and analyze them."""
     logging.basicConfig(level=getattr(logging, log_level), format="%(message)s")
+
+    try:
+        token = get_github_token()
+    except RuntimeError as e:
+        logger.exception("Failed to get GitHub token")
+        raise typer.Exit(code=1) from e
+
+    g = Github(auth=Auth.Token(token))
+
     full_list_of_existing_actions = FullListOfExistingActions(
         search_configs=SEARCH_CONFIGS,
     )
@@ -56,7 +67,7 @@ def main(
     uniq_github_actions = UniqGithubActions()
     uniq_github_actions.init_from_full_list(results)
 
-    uniq_github_actions.get_fully_qualified()
+    uniq_github_actions.get_fully_qualified(g)
 
     for file, actions_list in results.items():
         logger.info("Reading all file to update github actions: %s", file)

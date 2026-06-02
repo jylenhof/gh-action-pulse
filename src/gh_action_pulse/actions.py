@@ -1,13 +1,11 @@
 """Defines the GithubAction and UniqGithubActions classes to handle action identification and metadata retrieval."""
 
 import logging
-import os
 import re
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Literal
 
 import semver
-from github import Auth, Github
 from github.GithubException import GithubException
 
 logger = logging.getLogger(__name__)
@@ -16,6 +14,7 @@ if TYPE_CHECKING:
     import datetime
     from pathlib import Path
 
+    from github import Github
     from github.Repository import Repository
 
 
@@ -75,7 +74,7 @@ class GithubAction:
             ) == (other.name, other.actual)
         return False
 
-    def get_fully_qualified(self) -> GithubAction:
+    def get_fully_qualified(self, g: Github) -> GithubAction:
         """Fetch metadata from GitHub API to determine the type and dates of references."""
         logger.info(
             "Looking for actual and recommended metadata for action: '%s' with reference: '%s' and description: '%s'",
@@ -83,8 +82,6 @@ class GithubAction:
             self.actual.reference,
             self.actual.description,
         )
-        auth = Auth.Token(os.environ["GITHUB_TOKEN"])
-        g = Github(auth=auth)
         logger.debug("Get Repo access to %s", self.name)
         repo = g.get_repo(self.name)  # missing exception catch here
         self._set_actual_reference_type_and_date(repo)
@@ -284,6 +281,6 @@ class UniqGithubActions:
                 return i
         raise GithubActionNotFoundError
 
-    def get_fully_qualified(self) -> set[GithubAction]:
+    def get_fully_qualified(self, g: Github) -> set[GithubAction]:
         """Update all actions in the collection with metadata from the GitHub API."""
-        return {action.get_fully_qualified() for action in self.get_actions()}
+        return {action.get_fully_qualified(g) for action in self.get_actions()}
