@@ -54,7 +54,8 @@ repos:
         files: '\.github/workflows/.*\.(yaml|yml)$'
       - id: pinact
         name: pinact
-        entry: "pinact run -u --min-age 7 --verify-comment"
+        #entry: "pinact run -u --min-age 7 --verify-comment"
+        entry: "pinact run -u --verify-comment" # min-age is not handled yet by gh-action-pulse
         language: system
         files: '\.github/(workflows/.*|actions/.*/action)\.(yaml|yml)$'
         pass_filenames: false
