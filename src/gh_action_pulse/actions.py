@@ -82,8 +82,10 @@ class GithubAction:
             self.actual.reference,
             self.actual.description,
         )
-        logger.debug("Get Repo access to %s", self.name)
-        repo = g.get_repo(self.name)  # missing exception catch here
+        # For actions like owner/repo/path@ref, the repo is owner/repo
+        repo_name = "/".join(self.name.split("/")[:2])
+        logger.debug("Get Repo access to %s (full action name: %s)", repo_name, self.name)
+        repo = g.get_repo(repo_name)  # missing exception catch here
         self._set_actual_reference_type_and_date(repo)
         logger.info("actual reference type is %s at date %s", self.actual.reference_type, self.actual.date)
         self._set_actual_description_type(repo)
