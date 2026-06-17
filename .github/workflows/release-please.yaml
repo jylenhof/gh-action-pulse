@@ -30,8 +30,6 @@ jobs:
           permission-contents: write
           permission-issues: write
           permission-pull-requests: write
-          owner: ${{ github.repository_owner }}
-          repositories: ${{ github.repository }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
