@@ -50,7 +50,6 @@ Randoms items
 - Be able to check for nodejs version in upstream repo
 - Be able to raise some warnings if there's no recent upstream tag within x days
 - Maybe configuration file with some ignore parameters or specific rules for some workflows
-- Implement release please
 - Check eventual redirection of action to update to new URL
 
 ## CONTRIBUTING
