@@ -1,0 +1,4 @@
+[branch]
+# https://conventional-branch.github.io/
+conventional_branch = true
+allow_branch_names = ["^release-please--branches--.*$", "^dependabot/.*$"]
