@@ -24,6 +24,7 @@ repos:
         entry: "rumdl check"
         language: system
         files: '\.md$'
+        exclude: 'CHANGELOG.md'
       - id: tombi-format # toml formatter
         name: "tombi format"
         entry: "tombi format"
