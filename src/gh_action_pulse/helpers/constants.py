@@ -8,3 +8,5 @@ SEARCH_CONFIGS: list[tuple[Path, str]] = [
     (Path(".github/actions"), "**/*.yml"),
     (Path(".github/actions"), "**/*.yaml"),
 ]
+
+MAX_MIN_AGE = 60

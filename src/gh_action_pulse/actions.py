@@ -1,5 +1,6 @@
 """Defines the GithubAction and UniqGithubActions classes to handle action identification and metadata retrieval."""
 
+import datetime
 import logging
 import re
 from dataclasses import dataclass
@@ -10,8 +11,8 @@ from github.GithubException import GithubException
 
 logger = logging.getLogger(__name__)
 
+
 if TYPE_CHECKING:
-    import datetime
     from pathlib import Path
 
     from github import Github
@@ -49,6 +50,8 @@ class GithubAction:
     name: str
     actual: ActualState
     recommended: Recommendation
+    repo: Repository
+    min_age: int
 
     def __init__(
         self,
@@ -74,7 +77,7 @@ class GithubAction:
             ) == (other.name, other.actual)
         return False
 
-    def get_fully_qualified(self, g: Github) -> GithubAction:
+    def get_fully_qualified(self, g: Github, min_age: int) -> GithubAction:
         """Fetch metadata from GitHub API to determine the type and dates of references."""
         logger.info(
             "Looking for actual and recommended metadata for action: '%s' with reference: '%s' and description: '%s'",
@@ -85,12 +88,13 @@ class GithubAction:
         # For actions like owner/repo/path@ref, the repo is owner/repo
         repo_name = "/".join(self.name.split("/")[:2])
         logger.debug("Get Repo access to %s (full action name: %s)", repo_name, self.name)
-        repo = g.get_repo(repo_name)  # missing exception catch here
-        self._set_actual_reference_type_and_date(repo)
+        self.repo = g.get_repo(repo_name)  # missing exception catch here
+        self.min_age = min_age
+        self._set_actual_reference_type_and_date()
         logger.info("actual reference type is %s at date %s", self.actual.reference_type, self.actual.date)
-        self._set_actual_description_type(repo)
+        self._set_actual_description_type()
         logger.info("actual description type is %s", self.actual.description_type)
-        self._set_recommended_reference_and_date(repo)
+        self._set_recommended_reference_and_date()
         logger.info(
             "recommendation is ref: %s at date: %s with description:%s",
             self.recommended.reference,
@@ -106,11 +110,11 @@ class GithubAction:
         )
         return self
 
-    def _set_actual_reference_type_and_date(self, repo: Repository) -> None:
+    def _set_actual_reference_type_and_date(self) -> None:
         """Determines the type and date of the actual reference."""
         try:
             # actually get_commit look for both sha and tag
-            commit = repo.get_commit(sha=self.actual.reference)
+            commit = self.repo.get_commit(sha=self.actual.reference)
             self.actual.date = commit.commit.committer.date
             if commit.commit.sha == self.actual.reference:
                 self.actual.reference_type = "sha"
@@ -122,9 +126,9 @@ class GithubAction:
             return
 
         try:
-            ref = repo.get_git_ref(f"heads/{self.actual.reference}")
+            ref = self.repo.get_git_ref(f"heads/{self.actual.reference}")
             self.actual.reference_type = "branch"
-            self.actual.date = repo.get_commit(sha=ref.object.sha).commit.committer.date
+            self.actual.date = self.repo.get_commit(sha=ref.object.sha).commit.committer.date
         except GithubException:
             pass
         else:
@@ -133,14 +137,14 @@ class GithubAction:
         self.actual.reference_type = "bullshit"
         self.actual.date = None
 
-    def _set_actual_description_type(self, repo: Repository) -> None:
+    def _set_actual_description_type(self) -> None:
         """Determines the type of the actual description."""
         if self.actual.description is None:
             self.actual.description_type = None
             return
 
         try:
-            repo.get_git_ref(f"tags/{self.actual.description}")
+            self.repo.get_git_ref(f"tags/{self.actual.description}")
             self.actual.description_type = "tag"
         except GithubException:
             pass
@@ -148,7 +152,7 @@ class GithubAction:
             return
 
         try:
-            repo.get_git_ref(f"heads/{self.actual.description}")
+            self.repo.get_git_ref(f"heads/{self.actual.description}")
             self.actual.description_type = "branch"
         except GithubException:
             pass
@@ -157,17 +161,17 @@ class GithubAction:
 
         self.actual.description_type = "bullshit"
 
-    def _set_recommended_reference_and_date(self, repo: Repository) -> None:
+    def _set_recommended_reference_and_date(self) -> None:
         """Orchestrates the recommendation logic based on reference type and versioning."""
-        valid_semver_tags = self._get_valid_semver_tags(repo)
+        valid_semver_tags = self._get_valid_semver_tags()
 
         match self.actual.reference_type:
             case "tag":
                 self._set_recommended_reference_and_date_to_tag_if_exists(valid_semver_tags)
             case "branch":
-                self._set_recommended_with_fallback(repo, valid_semver_tags, self.actual.reference)
+                self._set_recommended_with_fallback(valid_semver_tags, self.actual.reference)
             case "sha":
-                self._set_recommended_for_sha(repo, valid_semver_tags)
+                self._set_recommended_for_sha(valid_semver_tags)
             case "bullshit":
                 logger.error("Cannot recommend update for invalid reference type.")
                 raise SystemExit(1)
@@ -175,44 +179,44 @@ class GithubAction:
                 logger.error("Unknown reference type encountered, that should not happen.")
                 raise SystemExit(1)
 
-    def _get_valid_semver_tags(self, repo: Repository) -> list:
+    def _get_valid_semver_tags(self) -> list:
         valid_semver_tags = []
-        for tag in repo.get_tags():
+        for tag in self.repo.get_tags():
             clean_name = tag.name.lstrip("v")
             if semver.Version.is_valid(clean_name):
                 valid_semver_tags.append(tag)
         valid_semver_tags.sort(key=lambda tag: semver.Version.parse(tag.name.lstrip("v")), reverse=True)
         return valid_semver_tags
 
-    def _set_recommended_for_sha(self, repo: Repository, valid_semver_tags: list) -> None:
+    def _set_recommended_for_sha(self, valid_semver_tags: list) -> None:
         match self.actual.description_type:
             case "tag":
                 self._set_recommended_reference_and_date_to_tag_if_exists(valid_semver_tags)
                 return
             case "branch":
-                self._set_recommended_with_fallback(repo, valid_semver_tags, self.actual.reference)
+                self._set_recommended_with_fallback(valid_semver_tags, self.actual.reference)
                 return
             case _:
-                if self._actual_sha_matches_tag(repo):
+                if self._actual_sha_matches_tag():
                     self._set_recommended_reference_and_date_to_tag_if_exists(valid_semver_tags)
 
                 if self.recommended.reference is None:
-                    self._set_recommended_to_branch(repo, self.actual.reference)
+                    self._set_recommended_to_branch(self.actual.reference)
 
-    def _actual_sha_matches_tag(self, repo: Repository) -> bool:
-        return any(tag.commit.commit.sha == self.actual.reference for tag in repo.get_tags())
+    def _actual_sha_matches_tag(self) -> bool:
+        return any(tag.commit.commit.sha == self.actual.reference for tag in self.repo.get_tags())
 
-    def _set_recommended_to_branch(self, repo: Repository, branch_name: str) -> None:
+    def _set_recommended_to_branch(self, branch_name: str) -> None:
         """Sets the recommendation to the latest commit of a specific branch."""
         try:
-            branch = repo.get_branch(branch_name)
+            branch = self.repo.get_branch(branch_name)
             self.recommended.reference = branch.commit.sha
             self.recommended.date = branch.commit.commit.committer.date
             self.recommended.description = branch_name
         except GithubException:
             logger.exception("Failed to fetch branch '%s', that should not happen.", branch_name)
 
-    def _set_recommended_with_fallback(self, repo: Repository, valid_tags: list, branch_name: str) -> None:
+    def _set_recommended_with_fallback(self, valid_tags: list, branch_name: str) -> None:
         """Tries to recommend the latest tag, falling back to a branch if the tag is older than the current pin."""
         self._set_recommended_reference_and_date_to_tag_if_exists(valid_tags)
 
@@ -221,14 +225,19 @@ class GithubAction:
         )
 
         if should_use_branch:
-            self._set_recommended_to_branch(repo, branch_name)
+            self._set_recommended_to_branch(branch_name)
 
     def _set_recommended_reference_and_date_to_tag_if_exists(self, valid_semver_tags: list) -> None:
-        if valid_semver_tags:
-            recommended_tag = valid_semver_tags[0]
-            self.recommended.reference = recommended_tag.commit.sha
-            self.recommended.date = recommended_tag.commit.commit.committer.date
-            self.recommended.description = f"{recommended_tag.name}"
+        now = datetime.datetime.now(datetime.UTC)
+        cutoff = now - datetime.timedelta(days=self.min_age)
+
+        for tag in valid_semver_tags:
+            tag_date = tag.commit.commit.committer.date
+            if tag_date <= cutoff:
+                self.recommended.reference = tag.commit.sha
+                self.recommended.date = tag_date
+                self.recommended.description = f"{tag.name}"
+                break
 
 
 class UniqGithubActions:
@@ -283,6 +292,6 @@ class UniqGithubActions:
                 return i
         raise GithubActionNotFoundError
 
-    def get_fully_qualified(self, g: Github) -> set[GithubAction]:
+    def get_fully_qualified(self, g: Github, min_age: int) -> set[GithubAction]:
         """Update all actions in the collection with metadata from the GitHub API."""
-        return {action.get_fully_qualified(g) for action in self.get_actions()}
+        return {action.get_fully_qualified(g, min_age) for action in self.get_actions()}
