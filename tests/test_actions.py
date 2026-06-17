@@ -57,7 +57,7 @@ class TestGithubAction:
         mock_g.get_repo.return_value = mock_repo
 
         # WHEN
-        result = action.get_fully_qualified(mock_g)
+        result = action.get_fully_qualified(mock_g, 0)
 
         # THEN
         assert result is action
@@ -69,12 +69,13 @@ class TestGithubAction:
         """Verify that _set_actual_reference_type_and_date correctly identifies the reference type and date."""
         action = GithubAction("actions/checkout", "v4")
         mock_repo = MagicMock()
+        action.repo = mock_repo
         mock_tag_v4 = MagicMock()
         mock_tag_v4.commit.commit.sha = "sha-for-v4"
         mock_tag_v4.commit.commit.committer.date = datetime.datetime(2025, 1, 3, tzinfo=datetime.UTC)
         mock_repo.get_commit.return_value = mock_tag_v4.commit
 
-        action._set_actual_reference_type_and_date(mock_repo)
+        action._set_actual_reference_type_and_date()
 
         assert action.actual.reference_type == "tag"
         assert action.actual.date == datetime.datetime(2025, 1, 3, tzinfo=datetime.UTC)
@@ -92,8 +93,9 @@ class TestGithubAction:
         mock_sha_v4.commit.commit.sha = target_sha
         mock_sha_v4.commit.commit.committer.date = datetime.datetime(2025, 1, 3, tzinfo=datetime.UTC)
         mock_repo.get_commit.return_value = mock_sha_v4.commit
+        action.repo = mock_repo
 
-        action._set_actual_reference_type_and_date(mock_repo)
+        action._set_actual_reference_type_and_date()
 
         assert action.actual.reference_type == "sha"
         assert action.actual.date == datetime.datetime(2025, 1, 3, tzinfo=datetime.UTC)
@@ -110,8 +112,9 @@ class TestGithubAction:
         mock_branch.commit.commit.committer.date = datetime.datetime(2025, 1, 3, tzinfo=datetime.UTC)
         mock_repo.get_commit.side_effect = [GithubException(404, "Not Found", None), mock_branch.commit]
         mock_repo.get_git_ref.return_value = mock_branch.commit
+        action.repo = mock_repo
 
-        action._set_actual_reference_type_and_date(mock_repo)
+        action._set_actual_reference_type_and_date()
 
         assert action.actual.reference_type == "branch"
         assert action.actual.date == datetime.datetime(2025, 1, 3, tzinfo=datetime.UTC)
@@ -124,8 +127,9 @@ class TestGithubAction:
         mock_repo = MagicMock()
         mock_repo.get_commit.side_effect = GithubException(404, "Not Found", None)
         mock_repo.get_git_ref.side_effect = GithubException(404, "Not Found", None)
+        action.repo = mock_repo
 
-        action._set_actual_reference_type_and_date(mock_repo)
+        action._set_actual_reference_type_and_date()
 
         assert action.actual.reference_type == "bullshit"
         assert action.actual.date is None
@@ -138,7 +142,7 @@ class TestGithubAction:
         action = GithubAction("actions/checkout", "v4", None)
         mock_repo = MagicMock()
 
-        action._set_actual_description_type(mock_repo)
+        action._set_actual_description_type()
 
         assert action.actual.description_type is None
         mock_repo.get_git_ref.assert_not_called()
@@ -148,8 +152,9 @@ class TestGithubAction:
         action = GithubAction("actions/checkout", "v4", "v4.0.0")
         mock_repo = MagicMock()
         mock_repo.get_git_ref.return_value = MagicMock()  # Simulate tag exists
+        action.repo = mock_repo
 
-        action._set_actual_description_type(mock_repo)
+        action._set_actual_description_type()
 
         assert action.actual.description_type == "tag"
         mock_repo.get_git_ref.assert_called_once_with("tags/v4.0.0")
@@ -163,8 +168,9 @@ class TestGithubAction:
             GithubException(404, "Not Found", None),
             mock_repo.get_git_ref.return_value,
         ]
+        action.repo = mock_repo
 
-        action._set_actual_description_type(mock_repo)
+        action._set_actual_description_type()
 
         assert action.actual.description_type == "branch"
         assert mock_repo.get_git_ref.call_count == 2
@@ -176,8 +182,9 @@ class TestGithubAction:
         action = GithubAction("actions/checkout", "v4", "invalid-desc")
         mock_repo = MagicMock()
         mock_repo.get_git_ref.side_effect = GithubException(404, "Not Found", None)
+        action.repo = mock_repo
 
-        action._set_actual_description_type(mock_repo)
+        action._set_actual_description_type()
 
         assert action.actual.description_type == "bullshit"
         assert mock_repo.get_git_ref.call_count == 2
@@ -195,14 +202,15 @@ class TestGithubAction:
         action = GithubAction("actions/checkout", "v4")
         action.actual.reference_type = "tag"
         mock_repo = MagicMock()
+        action.repo = mock_repo
         mock_tag_v4 = MagicMock()
         mock_tag_v6 = MagicMock()
         mock__get_valid_semver_tags.return_value = [mock_tag_v6, mock_tag_v4]
         mock_valid_semver_tags = mock__get_valid_semver_tags.return_value
 
-        action._set_recommended_reference_and_date(mock_repo)
+        action._set_recommended_reference_and_date()
 
-        mock__get_valid_semver_tags.assert_called_once_with(mock_repo)
+        mock__get_valid_semver_tags.assert_called_once_with()
         mock__set_recommended_reference_and_date_to_tag_if_exists.assert_called_once_with(mock_valid_semver_tags)
 
     @patch("gh_action_pulse.actions.GithubAction._get_valid_semver_tags")
@@ -216,15 +224,16 @@ class TestGithubAction:
         action = GithubAction("actions/checkout", "main")
         action.actual.reference_type = "branch"
         mock_repo = MagicMock()
+        action.repo = mock_repo
         mock_tag_v4 = MagicMock()
         mock_tag_v6 = MagicMock()
         mock__get_valid_semver_tags.return_value = [mock_tag_v6, mock_tag_v4]
         mock_valid_semver_tags = mock__get_valid_semver_tags.return_value
 
-        action._set_recommended_reference_and_date(mock_repo)
+        action._set_recommended_reference_and_date()
 
-        mock__get_valid_semver_tags.assert_called_once_with(mock_repo)
-        mock__set_recommended_with_fallback.assert_called_once_with(mock_repo, mock_valid_semver_tags, "main")
+        mock__get_valid_semver_tags.assert_called_once_with()
+        mock__set_recommended_with_fallback.assert_called_once_with(mock_valid_semver_tags, "main")
 
     @patch("gh_action_pulse.actions.GithubAction._get_valid_semver_tags")
     @patch("gh_action_pulse.actions.GithubAction._set_recommended_for_sha")
@@ -237,15 +246,16 @@ class TestGithubAction:
         action = GithubAction("actions/checkout", "sha-for-v4", "v4.0.0")
         action.actual.reference_type = "sha"
         mock_repo = MagicMock()
+        action.repo = mock_repo
         mock_tag_v4 = MagicMock()
         mock_tag_v6 = MagicMock()
         mock__get_valid_semver_tags.return_value = [mock_tag_v6, mock_tag_v4]
         mock_valid_semver_tags = mock__get_valid_semver_tags.return_value
 
-        action._set_recommended_reference_and_date(mock_repo)
+        action._set_recommended_reference_and_date()
 
-        mock__get_valid_semver_tags.assert_called_once_with(mock_repo)
-        mock__set_recommended_for_sha.assert_called_once_with(mock_repo, mock_valid_semver_tags)
+        mock__get_valid_semver_tags.assert_called_once_with()
+        mock__set_recommended_for_sha.assert_called_once_with(mock_valid_semver_tags)
 
     @pytest.mark.parametrize(
         ("reference_type", "error_message"),
@@ -267,14 +277,15 @@ class TestGithubAction:
         action = GithubAction("actions/checkout", "sha-for-main", "main")
         action.actual.reference_type = reference_type
         mock_repo = MagicMock()
+        action.repo = mock_repo
         mock_tag_v4 = MagicMock()
         mock_tag_v6 = MagicMock()
         mock__get_valid_semver_tags.return_value = [mock_tag_v6, mock_tag_v4]
 
         with pytest.raises(SystemExit):
-            action._set_recommended_reference_and_date(mock_repo)
+            action._set_recommended_reference_and_date()
 
-        mock__get_valid_semver_tags.assert_called_once_with(mock_repo)
+        mock__get_valid_semver_tags.assert_called_once_with()
         capture.check(("gh_action_pulse.actions", "ERROR", error_message))
 
     def test__get_valid_semver_tags(self, create_mock_tag: Callable[..., MagicMock]) -> None:  # pylint: disable=redefined-outer-name
@@ -292,9 +303,10 @@ class TestGithubAction:
             create_mock_tag("v6.0.0"),
         ]
         mock_repo.get_tags.return_value = tags
+        action.repo = mock_repo
         expected_names = ["v6.0.0", "v6.0.0-alpha1", "v5.0.0", "v4.0.2", "v4.0.1", "v4.0.0"]
 
-        results = action._get_valid_semver_tags(mock_repo)
+        results = action._get_valid_semver_tags()
 
         assert [tag.name for tag in results] == expected_names
 
@@ -306,10 +318,11 @@ class TestGithubAction:
         """Verify that _set_recommended_for_sha works correctly when the description is a tag."""
         action = GithubAction("actions/checkout", "sha-for-main", "tag")
         mock_repo = MagicMock()
+        action.repo = mock_repo
         action.actual.description_type = "tag"
         mock_valid_semver_tags = [MagicMock(), MagicMock()]
 
-        action._set_recommended_for_sha(mock_repo, mock_valid_semver_tags)
+        action._set_recommended_for_sha(mock_valid_semver_tags)
 
         assert mock__set_recommended_reference_and_date_to_tag_if_exists.call_once_with(mock_valid_semver_tags)
 
@@ -321,11 +334,12 @@ class TestGithubAction:
         action = GithubAction("actions/checkout", "sha-for-main", "main")
         mock_repo = MagicMock()
         action.actual.description_type = "branch"
+        action.repo = mock_repo
         mock_valid_semver_tags = [MagicMock(), MagicMock()]
 
-        action._set_recommended_for_sha(mock_repo, mock_valid_semver_tags)
+        action._set_recommended_for_sha(mock_valid_semver_tags)
 
-        assert mock__set_recommended_with_fallback.call_once_with(mock_repo, mock_valid_semver_tags, "main")
+        assert mock__set_recommended_with_fallback.call_once_with(mock_valid_semver_tags, "main")
 
     @patch("gh_action_pulse.actions.GithubAction._actual_sha_matches_tag")
     @patch("gh_action_pulse.actions.GithubAction._set_recommended_reference_and_date_to_tag_if_exists")
@@ -339,15 +353,16 @@ class TestGithubAction:
         """Verify that _set_recommended_for_sha works correctly when the description is bullshit or None."""
         action = GithubAction("actions/checkout", "sha-for-main", "main")
         mock_repo = MagicMock()
+        action.repo = mock_repo
         action.actual.description_type = "bullshit"
         mock_valid_semver_tags = [MagicMock(), MagicMock()]
         mock__actual_sha_matches_tag.return_value = True
         action.recommended.reference = "v6.0.0"
 
-        action._set_recommended_for_sha(mock_repo, mock_valid_semver_tags)
+        action._set_recommended_for_sha(mock_valid_semver_tags)
 
         assert mock__set_recommended_reference_and_date_to_tag_if_exists.call_once_with(mock_valid_semver_tags)
-        assert mock__set_recommended_to_branch.call_once_with(mock_repo, "main")
+        assert mock__set_recommended_to_branch.call_once_with("main")
 
     @patch("gh_action_pulse.actions.GithubAction._actual_sha_matches_tag")
     @patch("gh_action_pulse.actions.GithubAction._set_recommended_reference_and_date_to_tag_if_exists")
@@ -361,15 +376,16 @@ class TestGithubAction:
         """Verify that _set_recommended_for_sha works correctly when the description is bullshit or None."""
         action = GithubAction("actions/checkout", "sha-for-main", "main")
         mock_repo = MagicMock()
+        action.repo = mock_repo
         action.actual.description_type = "bullshit"
         mock_valid_semver_tags = [MagicMock(), MagicMock()]
         mock__actual_sha_matches_tag.return_value = False
         action.recommended.reference = None
 
-        action._set_recommended_for_sha(mock_repo, mock_valid_semver_tags)
+        action._set_recommended_for_sha(mock_valid_semver_tags)
 
         assert mock__set_recommended_reference_and_date_to_tag_if_exists.call_count == 0
-        assert mock__set_recommended_to_branch.call_once_with(mock_repo, "main")
+        assert mock__set_recommended_to_branch.call_once_with("main")
 
     def test__actual_sha_matches_tag(self) -> None:
         """Verify that _actual_sha_matches_tag correctly identifies when the actual sha matches a tag."""
@@ -380,8 +396,9 @@ class TestGithubAction:
         mock_tag_v6 = MagicMock()
         mock_tag_v6.commit.commit.sha = "sha-for-v6"
         mock_repo.get_tags.return_value = [mock_tag_v4, mock_tag_v6]
+        action.repo = mock_repo
 
-        result = action._actual_sha_matches_tag(mock_repo)
+        result = action._actual_sha_matches_tag()
 
         assert result is True
 
@@ -393,8 +410,9 @@ class TestGithubAction:
         mock_branch.commit.sha = "sha-for-main"
         mock_branch.commit.commit.committer.date = datetime.datetime(2025, 1, 3, tzinfo=datetime.UTC)
         mock_repo.get_branch.return_value = mock_branch
+        action.repo = mock_repo
 
-        action._set_recommended_to_branch(mock_repo, "main")
+        action._set_recommended_to_branch("main")
 
         assert action.recommended.reference == "sha-for-main"
         assert action.recommended.date == datetime.datetime(2025, 1, 3, tzinfo=datetime.UTC)
@@ -406,8 +424,9 @@ class TestGithubAction:
         action = GithubAction("actions/checkout", "sha-for-main-old", "main")
         mock_repo = MagicMock()
         mock_repo.get_branch.side_effect = GithubException(404, "Not Found", None)
+        action.repo = mock_repo
 
-        action._set_recommended_to_branch(mock_repo, "main")
+        action._set_recommended_to_branch("main")
 
         capture.check(("gh_action_pulse.actions", "ERROR", "Failed to fetch branch 'main', that should not happen."))
 
@@ -420,15 +439,15 @@ class TestGithubAction:
     ) -> None:
         """Checks that _set_recommended_with_fallback sets the recommended reference and date based."""
         action = GithubAction("actions/checkout", "sha-for-main-old", "main")
-
         mock_repo = MagicMock()
+        action.repo = mock_repo
         mock_tag_v6 = MagicMock()
         action.recommended.date = None
 
-        action._set_recommended_with_fallback(mock_repo, [mock_tag_v6], "main")
+        action._set_recommended_with_fallback([mock_tag_v6], "main")
 
         mock__set_recommended_reference_and_date_to_tag_if_exists.assert_called_once_with([mock_tag_v6])
-        mock__set_recommended_to_branch.assert_called_once_with(mock_repo, "main")
+        mock__set_recommended_to_branch.assert_called_once_with("main")
 
     @patch("gh_action_pulse.actions.GithubAction._set_recommended_reference_and_date_to_tag_if_exists")
     @patch("gh_action_pulse.actions.GithubAction._set_recommended_to_branch")
@@ -441,12 +460,13 @@ class TestGithubAction:
         action = GithubAction("actions/checkout", "sha-for-main-old", "main")
 
         mock_repo = MagicMock()
+        action.repo = mock_repo
         mock_tag_v6 = MagicMock()
         mock_tag_v6.commit.commit.committer.date = datetime.datetime(2026, 1, 3, tzinfo=datetime.UTC)
         action.actual.date = datetime.datetime(2025, 1, 3, tzinfo=datetime.UTC)
         action.recommended.date = datetime.datetime(2026, 1, 3, tzinfo=datetime.UTC)
 
-        action._set_recommended_with_fallback(mock_repo, [mock_tag_v6], "main")
+        action._set_recommended_with_fallback([mock_tag_v6], "main")
 
         mock__set_recommended_reference_and_date_to_tag_if_exists.assert_called_once_with([mock_tag_v6])
         mock__set_recommended_to_branch.assert_not_called()
@@ -454,6 +474,7 @@ class TestGithubAction:
     def test__set_recommended_reference_and_date_to_tag_if_exists_with_valid_tags(self) -> None:
         """Checks that _set_recommended_reference_and_date_to_tag_if_exists sets the recommended ref and date."""
         action = GithubAction("actions/checkout", "sha-for-main-old", "main")
+        action.min_age = 0
         mock_tag_v4 = MagicMock()
         mock_tag_v4.name = "v4.0.0"
         mock_tag_v4.commit.commit.committer.date = datetime.datetime(2025, 1, 3, tzinfo=datetime.UTC)
@@ -471,8 +492,29 @@ class TestGithubAction:
     def test__set_recommended_reference_and_date_to_tag_if_exists_with_no_tags(self) -> None:
         """Checks that _set_recommended_reference_and_date_to_tag_if_exists sets the recommended ref and date."""
         action = GithubAction("actions/checkout", "sha-for-main-old", "main")
+        action.min_age = 0
 
         action._set_recommended_reference_and_date_to_tag_if_exists([])
+
+    def test__set_recommended_reference_and_date_to_tag_if_exists_with_newer_tag(self) -> None:
+        """Checks that tags newer than the min_age cutoff are not recommended."""
+        action = GithubAction("actions/checkout", "sha-for-main-old", "main")
+        action.min_age = 30
+        now = datetime.datetime.now(datetime.UTC)
+        mock_tag_v6 = MagicMock()
+        mock_tag_v6.name = "v6.0.0"
+        mock_tag_v6.commit.sha = "sha-for-v6"
+        mock_tag_v6.commit.commit.committer.date = now - datetime.timedelta(days=29)
+        mock_tag_v4 = MagicMock()
+        mock_tag_v4.name = "v4.0.0"
+        mock_tag_v4.commit.sha = "sha-for-v4"
+        mock_tag_v4.commit.commit.committer.date = datetime.datetime(2026, 1, 3, tzinfo=datetime.UTC)
+
+        action._set_recommended_reference_and_date_to_tag_if_exists([mock_tag_v6, mock_tag_v4])
+
+        assert action.recommended.reference == "sha-for-v4"
+        assert action.recommended.date == datetime.datetime(2026, 1, 3, tzinfo=datetime.UTC)
+        assert action.recommended.description == "v4.0.0"
 
 
 class TestUniqGithubActions:
@@ -494,13 +536,14 @@ class TestUniqGithubActions:
         a1 = GithubAction(name, version, description)
         uniq.add(a1)
 
-        def mock_impl(_: MagicMock) -> GithubAction:
+        def mock_impl(_: MagicMock, min_age: int) -> GithubAction:
             a1.recommended.date = datecommit
+            a1.min_age = min_age
             return a1
 
         mock_get_fq.side_effect = mock_impl
 
-        fully_qualified_actions = uniq.get_fully_qualified(MagicMock())
+        fully_qualified_actions = uniq.get_fully_qualified(MagicMock(), 0)
         assert len(fully_qualified_actions) == 1
         # Convert to list to access by index, or iterate.
         # Since we expect only one, converting to list and taking the first element is acceptable.
@@ -552,7 +595,7 @@ class TestUniqGithubActions:
     def test_get_fully_qualified_empty(self) -> None:
         """Verify get_fully_qualified returns an empty set if no actions are present."""
         uniq = UniqGithubActions()
-        assert uniq.get_fully_qualified(MagicMock()) == set()
+        assert uniq.get_fully_qualified(MagicMock(), 0) == set()
 
     def test_add(self) -> None:
         """Verify that adding a GithubAction stores it in the unique actions collection."""
@@ -631,7 +674,7 @@ class TestUniqGithubActions:
 
         mock_get_fq.side_effect = [a1, a2]
 
-        fully_qualified_actions = uniq.get_fully_qualified(MagicMock())
+        fully_qualified_actions = uniq.get_fully_qualified(MagicMock(), 0)
         assert len(fully_qualified_actions) == 2
 
         # Convert to list for iteration, and find specific actions by name

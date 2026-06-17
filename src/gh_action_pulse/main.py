@@ -11,11 +11,30 @@ from github import Auth, Github
 
 from gh_action_pulse.actions import UniqGithubActions
 from gh_action_pulse.full_list_of_existing_actions import FullListOfExistingActions
-from gh_action_pulse.helpers.constants import SEARCH_CONFIGS
+from gh_action_pulse.helpers.constants import MAX_MIN_AGE, SEARCH_CONFIGS
 from gh_action_pulse.helpers.github import get_github_token
 
 logger = logging.getLogger(__name__)
 app = typer.Typer()
+
+
+def validate_min_age(min_age: int) -> int:
+    """Validate that min_age is within the allowed range."""
+    if min_age < 0:
+        msg_min: str = "min_age must be 0 or greater."
+        raise ValueError(msg_min)
+    if min_age > MAX_MIN_AGE:
+        msg_max: str = f"min_age cannot exceed {MAX_MIN_AGE} days."
+        raise ValueError(msg_max)
+    return min_age
+
+
+def validate_min_age_cli(min_age: int) -> int:
+    """Typer callback that validates min_age using shared business logic."""
+    try:
+        return validate_min_age(min_age)
+    except ValueError as exc:
+        raise typer.BadParameter(str(exc)) from exc
 
 
 class LogLevel(StrEnum):
@@ -47,6 +66,15 @@ def main(
             show_default=True,
         ),
     ] = LogLevel.INFO,
+    min_age: Annotated[
+        int,
+        typer.Option(
+            "--min-age",
+            help=f"Minimum age of actions to consider (in days, max {MAX_MIN_AGE})",
+            show_default=True,
+            callback=validate_min_age_cli,
+        ),
+    ] = 20,
 ) -> None:
     """Main function to scan for 'uses:' statements and analyze them."""
     logging.basicConfig(level=getattr(logging, log_level), format="%(message)s")
@@ -67,7 +95,7 @@ def main(
     uniq_github_actions = UniqGithubActions()
     uniq_github_actions.init_from_full_list(results)
 
-    uniq_github_actions.get_fully_qualified(g)
+    uniq_github_actions.get_fully_qualified(g, min_age)
 
     for file, actions_list in results.items():
         logger.info("Reading all file to update github actions: %s", file)
