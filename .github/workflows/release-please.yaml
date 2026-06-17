@@ -28,7 +28,6 @@ jobs:
           # GitHub App private key secret name
           private-key: ${{ secrets.APP_PRIVATE_KEY }}
           permission-contents: write
-          permission-issues: write
           permission-pull-requests: write
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
