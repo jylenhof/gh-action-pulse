@@ -52,6 +52,7 @@ class GithubAction:
     recommended: Recommendation
     repo: Repository
     min_age: int
+    latest_semver_tag_date: datetime.datetime | None = None
 
     def __init__(
         self,
@@ -186,7 +187,18 @@ class GithubAction:
             if semver.Version.is_valid(clean_name):
                 valid_semver_tags.append(tag)
         valid_semver_tags.sort(key=lambda tag: semver.Version.parse(tag.name.lstrip("v")), reverse=True)
+        if valid_semver_tags:
+            self.latest_semver_tag_date = valid_semver_tags[0].commit.commit.committer.date
+        else:
+            self.latest_semver_tag_date = None
         return valid_semver_tags
+
+    def is_tag_fresh(self, max_age_days: int) -> bool:
+        """Return True when the latest semver tag is not older than max_age_days."""
+        if self.latest_semver_tag_date is None:
+            return False
+        age = datetime.datetime.now(datetime.UTC) - self.latest_semver_tag_date.astimezone(datetime.UTC)
+        return age.days <= max_age_days
 
     def _set_recommended_for_sha(self, valid_semver_tags: list) -> None:
         match self.actual.description_type:
@@ -295,3 +307,9 @@ class UniqGithubActions:
     def get_fully_qualified(self, g: Github, min_age: int) -> set[GithubAction]:
         """Update all actions in the collection with metadata from the GitHub API."""
         return {action.get_fully_qualified(g, min_age) for action in self.get_actions()}
+
+    def get_stale_actions(self, max_age_days: int) -> list[GithubAction]:
+        """Return actions whose latest semver tag is older than max_age_days."""
+        if max_age_days <= 0:
+            return []
+        return [action for action in self.get_actions() if not action.is_tag_fresh(max_age_days)]

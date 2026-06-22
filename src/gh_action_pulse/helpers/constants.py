@@ -10,3 +10,4 @@ SEARCH_CONFIGS: list[tuple[Path, str]] = [
 ]
 
 MAX_MIN_AGE = 60
+DEFAULT_TOO_OLD_IN_DAYS = 150
