@@ -31,7 +31,7 @@ jobs:
           fetch-depth: 0  # Required for merge-base checks
           persist-credentials: false
 
-      - uses: commit-check/commit-check-action@c7245f6139b55db23f92266c2f0ff8429c64de80 # v2.8.0
+      - uses: commit-check/commit-check-action@60e903b3fb06f5e64580b959f58d5b9406a3e002 # v2.9.0
         with:
           message: true
           branch: true
