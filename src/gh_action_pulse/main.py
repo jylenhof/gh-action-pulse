@@ -12,7 +12,7 @@ from github import Auth, Github
 
 from gh_action_pulse.actions import GithubAction, UniqGithubActions
 from gh_action_pulse.full_list_of_existing_actions import FullListOfExistingActions
-from gh_action_pulse.helpers.constants import DEFAULT_MIN_AGE, DEFAULT_TOO_OLD_IN_DAYS, MAX_MIN_AGE, SEARCH_CONFIGS
+from gh_action_pulse.helpers.constants import DEFAULT_MAX_AGE, DEFAULT_MIN_AGE, MAX_MIN_AGE, SEARCH_CONFIGS
 from gh_action_pulse.helpers.github import get_github_token
 
 logger = logging.getLogger(__name__)
@@ -119,7 +119,7 @@ def main(
             show_default=True,
             callback=validate_too_old_in_days_cli,
         ),
-    ] = DEFAULT_TOO_OLD_IN_DAYS,
+    ] = DEFAULT_MAX_AGE,
 ) -> None:
     """Main function to scan for 'uses:' statements and analyze them."""
     logging.basicConfig(level=getattr(logging, log_level), format="%(message)s")
