@@ -12,7 +12,7 @@ from github import Auth, Github
 
 from gh_action_pulse.actions import GithubAction, UniqGithubActions
 from gh_action_pulse.full_list_of_existing_actions import FullListOfExistingActions
-from gh_action_pulse.helpers.constants import DEFAULT_TOO_OLD_IN_DAYS, MAX_MIN_AGE, SEARCH_CONFIGS
+from gh_action_pulse.helpers.constants import DEFAULT_MIN_AGE, DEFAULT_TOO_OLD_IN_DAYS, MAX_MIN_AGE, SEARCH_CONFIGS
 from gh_action_pulse.helpers.github import get_github_token
 
 logger = logging.getLogger(__name__)
@@ -65,20 +65,18 @@ class LogLevel(StrEnum):
 
 
 def warn_about_stale_actions(stale_actions: list[GithubAction], too_old_in_days: int) -> None:
-    """Log warnings for actions whose latest semver tag exceeds the freshness threshold."""
+    """Log warnings for actions whose min-age eligible tag exceeds the freshness threshold."""
     for action in stale_actions:
-        if action.latest_semver_tag_date is None:
+        if not action.has_semver_tags:
             logger.warning(
                 "No semver tag found for action '%s'; cannot verify tag freshness within %d days.",
                 action.name,
                 too_old_in_days,
             )
-        else:
-            age_days = (
-                datetime.datetime.now(datetime.UTC) - action.latest_semver_tag_date.astimezone(datetime.UTC)
-            ).days
-            logger.warning(
-                "Latest semver tag for action '%s' is %d days old (limit: %d days).",
+        elif action.min_age_tag_date is not None:
+            age_days = (datetime.datetime.now(datetime.UTC) - action.min_age_tag_date.astimezone(datetime.UTC)).days
+            logger.error(
+                "Min-age eligible tag for action '%s' is %d days old (limit: %d days).",
                 action.name,
                 age_days,
                 too_old_in_days,
@@ -112,12 +110,12 @@ def main(
             show_default=True,
             callback=validate_min_age_cli,
         ),
-    ] = 20,
+    ] = DEFAULT_MIN_AGE,
     too_old_in_days: Annotated[
         int,
         typer.Option(
             "--too-old-in-days",
-            help="Fail when the latest upstream semver tag is older than this many days (0 disables the check)",
+            help="Fail when the min-age eligible upstream tag is older than this many days (0 disables the check)",
             show_default=True,
             callback=validate_too_old_in_days_cli,
         ),
