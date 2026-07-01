@@ -102,7 +102,7 @@ def main(
             show_default=True,
         ),
     ] = LogLevel.INFO,
-    min_age: Annotated[
+    min_age_in_days: Annotated[
         int,
         typer.Option(
             "--min-age",
@@ -111,10 +111,10 @@ def main(
             callback=validate_min_age_cli,
         ),
     ] = DEFAULT_MIN_AGE,
-    too_old_in_days: Annotated[
+    max_age_in_days: Annotated[
         int,
         typer.Option(
-            "--too-old-in-days",
+            "--max-age",
             help="Fail when the min-age eligible upstream tag is older than this many days (0 disables the check)",
             show_default=True,
             callback=validate_too_old_in_days_cli,
@@ -140,10 +140,10 @@ def main(
     uniq_github_actions = UniqGithubActions()
     uniq_github_actions.init_from_full_list(results)
 
-    uniq_github_actions.get_fully_qualified(g, min_age)
+    uniq_github_actions.get_fully_qualified(g, min_age_in_days)
 
-    stale_actions = uniq_github_actions.get_stale_actions(too_old_in_days)
-    warn_about_stale_actions(stale_actions, too_old_in_days)
+    stale_actions = uniq_github_actions.get_stale_actions(max_age_in_days)
+    warn_about_stale_actions(stale_actions, max_age_in_days)
 
     for file, actions_list in results.items():
         logger.info("Reading all file to update github actions: %s", file)
