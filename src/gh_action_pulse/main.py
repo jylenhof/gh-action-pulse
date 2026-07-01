@@ -38,18 +38,18 @@ def validate_min_age_cli(min_age: int) -> int:
         raise typer.BadParameter(str(exc)) from exc
 
 
-def validate_too_old_in_days(too_old_in_days: int) -> int:
+def validate_max_age(max_age: int) -> int:
     """Validate that too_old_in_days is within the allowed range."""
-    if too_old_in_days < 0:
+    if max_age < 0:
         msg: str = "too_old_in_days must be 0 or greater."
         raise ValueError(msg)
-    return too_old_in_days
+    return max_age
 
 
-def validate_too_old_in_days_cli(too_old_in_days: int) -> int:
+def validate_max_age_cli(max_age: int) -> int:
     """Typer callback that validates too_old_in_days using shared business logic."""
     try:
-        return validate_too_old_in_days(too_old_in_days)
+        return validate_max_age(max_age)
     except ValueError as exc:
         raise typer.BadParameter(str(exc)) from exc
 
@@ -64,14 +64,14 @@ class LogLevel(StrEnum):
     CRITICAL = "CRITICAL"
 
 
-def warn_about_stale_actions(stale_actions: list[GithubAction], too_old_in_days: int) -> None:
+def warn_about_stale_actions(stale_actions: list[GithubAction], max_age: int) -> None:
     """Log warnings for actions whose min-age eligible tag exceeds the freshness threshold."""
     for action in stale_actions:
         if not action.has_semver_tags:
             logger.warning(
                 "No semver tag found for action '%s'; cannot verify tag freshness within %d days.",
                 action.name,
-                too_old_in_days,
+                max_age,
             )
         elif action.min_age_tag_date is not None:
             age_days = (datetime.datetime.now(datetime.UTC) - action.min_age_tag_date.astimezone(datetime.UTC)).days
@@ -79,7 +79,7 @@ def warn_about_stale_actions(stale_actions: list[GithubAction], too_old_in_days:
                 "Min-age eligible tag for action '%s' is %d days old (limit: %d days).",
                 action.name,
                 age_days,
-                too_old_in_days,
+                max_age,
             )
 
 
@@ -117,7 +117,7 @@ def main(
             "--max-age",
             help="Fail when the min-age eligible upstream tag is older than this many days (0 disables the check)",
             show_default=True,
-            callback=validate_too_old_in_days_cli,
+            callback=validate_max_age_cli,
         ),
     ] = DEFAULT_MAX_AGE,
 ) -> None:
