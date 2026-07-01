@@ -52,6 +52,8 @@ class GithubAction:
     recommended: Recommendation
     repo: Repository
     min_age: int
+    min_age_tag_date: datetime.datetime | None = None
+    has_semver_tags: bool = False
 
     def __init__(
         self,
@@ -186,7 +188,15 @@ class GithubAction:
             if semver.Version.is_valid(clean_name):
                 valid_semver_tags.append(tag)
         valid_semver_tags.sort(key=lambda tag: semver.Version.parse(tag.name.lstrip("v")), reverse=True)
+        self.has_semver_tags = bool(valid_semver_tags)
         return valid_semver_tags
+
+    def is_tag_fresh(self, max_age_days: int) -> bool:
+        """Return True when the min-age eligible tag is not older than max_age_days."""
+        if self.min_age_tag_date is not None:
+            age = datetime.datetime.now(datetime.UTC) - self.min_age_tag_date.astimezone(datetime.UTC)
+            return age.days <= max_age_days
+        return bool(self.has_semver_tags)
 
     def _set_recommended_for_sha(self, valid_semver_tags: list) -> None:
         match self.actual.description_type:
@@ -230,6 +240,7 @@ class GithubAction:
     def _set_recommended_reference_and_date_to_tag_if_exists(self, valid_semver_tags: list) -> None:
         now = datetime.datetime.now(datetime.UTC)
         cutoff = now - datetime.timedelta(days=self.min_age)
+        self.min_age_tag_date = None
 
         for tag in valid_semver_tags:
             tag_date = tag.commit.commit.committer.date
@@ -237,6 +248,7 @@ class GithubAction:
                 self.recommended.reference = tag.commit.sha
                 self.recommended.date = tag_date
                 self.recommended.description = f"{tag.name}"
+                self.min_age_tag_date = tag_date
                 break
 
 
@@ -295,3 +307,9 @@ class UniqGithubActions:
     def get_fully_qualified(self, g: Github, min_age: int) -> set[GithubAction]:
         """Update all actions in the collection with metadata from the GitHub API."""
         return {action.get_fully_qualified(g, min_age) for action in self.get_actions()}
+
+    def get_stale_actions(self, max_age_days: int) -> list[GithubAction]:
+        """Return actions whose min-age eligible tag is older than max_age_days."""
+        if max_age_days <= 0:
+            return []
+        return [action for action in self.get_actions() if not action.is_tag_fresh(max_age_days)]

@@ -45,12 +45,14 @@ pipx install gh-action-pulse
 
 Randoms items
 
-- Maybe Separate unit tests with appropriate workflow (pytest)
+- Maybe Separate unit tests with appropriate workflow (pytest) if checks takes times
 - Add E2E tests with appropriate workflow (pytest and/or bats)
 - Be able to check for nodejs version in upstream repo
 - Be able to raise some warnings if there's no recent upstream tag within x days
-- Maybe configuration file with some ignore parameters or specific rules for some workflows
-- Check eventual redirection of action to update to new URL
+- Maybe configuration file with some ignore parameters or specific rules for some workflows (needs thinking)
+- Check eventual redirection of action to update to new URL (is there an example of this ?)
+- Check if github repo of actions is not in readonly mode (sample: <https://github.com/google-github-actions/release-please-action>)
+- Change to versioned version of tools in mise.toml when near stable version (could depend on tools)
 
 ## CONTRIBUTING
 

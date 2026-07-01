@@ -1,5 +1,6 @@
 """This script scans GitHub Actions workflow and action definition files for 'uses:' statements."""
 
+import datetime
 import logging
 import re
 from enum import StrEnum
@@ -9,9 +10,9 @@ from typing import Annotated
 import typer
 from github import Auth, Github
 
-from gh_action_pulse.actions import UniqGithubActions
+from gh_action_pulse.actions import GithubAction, UniqGithubActions
 from gh_action_pulse.full_list_of_existing_actions import FullListOfExistingActions
-from gh_action_pulse.helpers.constants import MAX_MIN_AGE, SEARCH_CONFIGS
+from gh_action_pulse.helpers.constants import DEFAULT_MAX_AGE, DEFAULT_MIN_AGE, MAX_MIN_AGE, SEARCH_CONFIGS
 from gh_action_pulse.helpers.github import get_github_token
 
 logger = logging.getLogger(__name__)
@@ -37,6 +38,22 @@ def validate_min_age_cli(min_age: int) -> int:
         raise typer.BadParameter(str(exc)) from exc
 
 
+def validate_max_age(max_age: int) -> int:
+    """Validate that too_old_in_days is within the allowed range."""
+    if max_age < 0:
+        msg: str = "too_old_in_days must be 0 or greater."
+        raise ValueError(msg)
+    return max_age
+
+
+def validate_max_age_cli(max_age: int) -> int:
+    """Typer callback that validates too_old_in_days using shared business logic."""
+    try:
+        return validate_max_age(max_age)
+    except ValueError as exc:
+        raise typer.BadParameter(str(exc)) from exc
+
+
 class LogLevel(StrEnum):
     """Logging levels supported by the CLI."""
 
@@ -45,6 +62,25 @@ class LogLevel(StrEnum):
     WARNING = "WARNING"
     ERROR = "ERROR"
     CRITICAL = "CRITICAL"
+
+
+def warn_about_stale_actions(stale_actions: list[GithubAction], max_age: int) -> None:
+    """Log warnings for actions whose min-age eligible tag exceeds the freshness threshold."""
+    for action in stale_actions:
+        if not action.has_semver_tags:
+            logger.warning(
+                "No semver tag found for action '%s'; cannot verify tag freshness within %d days.",
+                action.name,
+                max_age,
+            )
+        elif action.min_age_tag_date is not None:
+            age_days = (datetime.datetime.now(datetime.UTC) - action.min_age_tag_date.astimezone(datetime.UTC)).days
+            logger.error(
+                "Min-age eligible tag for action '%s' is %d days old (limit: %d days).",
+                action.name,
+                age_days,
+                max_age,
+            )
 
 
 @app.command(help="Scan for 'uses:' statements in GitHub Actions workflow and action definition files.")
@@ -66,7 +102,7 @@ def main(
             show_default=True,
         ),
     ] = LogLevel.INFO,
-    min_age: Annotated[
+    min_age_in_days: Annotated[
         int,
         typer.Option(
             "--min-age",
@@ -74,7 +110,16 @@ def main(
             show_default=True,
             callback=validate_min_age_cli,
         ),
-    ] = 20,
+    ] = DEFAULT_MIN_AGE,
+    max_age_in_days: Annotated[
+        int,
+        typer.Option(
+            "--max-age",
+            help="Fail when the min-age eligible upstream tag is older than this many days (0 disables the check)",
+            show_default=True,
+            callback=validate_max_age_cli,
+        ),
+    ] = DEFAULT_MAX_AGE,
 ) -> None:
     """Main function to scan for 'uses:' statements and analyze them."""
     logging.basicConfig(level=getattr(logging, log_level), format="%(message)s")
@@ -95,7 +140,10 @@ def main(
     uniq_github_actions = UniqGithubActions()
     uniq_github_actions.init_from_full_list(results)
 
-    uniq_github_actions.get_fully_qualified(g, min_age)
+    uniq_github_actions.get_fully_qualified(g, min_age_in_days)
+
+    stale_actions = uniq_github_actions.get_stale_actions(max_age_in_days)
+    warn_about_stale_actions(stale_actions, max_age_in_days)
 
     for file, actions_list in results.items():
         logger.info("Reading all file to update github actions: %s", file)
@@ -131,6 +179,9 @@ def main(
             with Path.open(file, mode="wt") as f:
                 f.writelines(file_lines)
             logger.info("End of writing file to update github actions: %s\n", file)
+
+    if stale_actions:
+        raise typer.Exit(code=1)
 
 
 # Run the main function when the script is executed directly (useful for vscode debugger)

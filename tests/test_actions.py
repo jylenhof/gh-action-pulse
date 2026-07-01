@@ -516,6 +516,75 @@ class TestGithubAction:
         assert action.recommended.date == datetime.datetime(2026, 1, 3, tzinfo=datetime.UTC)
         assert action.recommended.description == "v4.0.0"
 
+    def test__get_valid_semver_tags_sets_has_semver_tags(self) -> None:
+        """Verify that _get_valid_semver_tags records whether semver tags exist."""
+        action = GithubAction("actions/checkout", "v4")
+        mock_repo = MagicMock()
+        mock_tag_v4 = MagicMock()
+        mock_tag_v4.name = "v4.0.0"
+        mock_tag_v6 = MagicMock()
+        mock_tag_v6.name = "v6.0.0"
+        mock_repo.get_tags.return_value = [mock_tag_v4, mock_tag_v6]
+        action.repo = mock_repo
+
+        action._get_valid_semver_tags()
+
+        assert action.has_semver_tags is True
+
+    def test__get_valid_semver_tags_clears_has_semver_tags_when_empty(self) -> None:
+        """Verify that _get_valid_semver_tags clears has_semver_tags when no semver tags exist."""
+        action = GithubAction("actions/checkout", "v4")
+        mock_repo = MagicMock()
+        mock_repo.get_tags.return_value = []
+        action.repo = mock_repo
+
+        action._get_valid_semver_tags()
+
+        assert action.has_semver_tags is False
+
+    def test__set_recommended_reference_and_date_to_tag_if_exists_sets_min_age_tag_date(self) -> None:
+        """Verify that the min-age eligible tag date is stored for freshness checks."""
+        action = GithubAction("actions/checkout", "sha-for-main-old", "main")
+        action.min_age = 0
+        mock_tag_v6 = MagicMock()
+        mock_tag_v6.name = "v6.0.0"
+        mock_tag_v6.commit.sha = "sha-for-v6"
+        mock_tag_v6.commit.commit.committer.date = datetime.datetime(2026, 1, 3, tzinfo=datetime.UTC)
+
+        action._set_recommended_reference_and_date_to_tag_if_exists([mock_tag_v6])
+
+        assert action.min_age_tag_date == datetime.datetime(2026, 1, 3, tzinfo=datetime.UTC)
+
+    def test_is_tag_fresh_when_within_limit(self) -> None:
+        """Verify is_tag_fresh returns True when the min-age eligible tag is within the allowed age."""
+        action = GithubAction("actions/checkout", "v4")
+        action.min_age_tag_date = datetime.datetime.now(datetime.UTC) - datetime.timedelta(days=10)
+
+        assert action.is_tag_fresh(150) is True
+
+    def test_is_tag_fresh_when_too_old(self) -> None:
+        """Verify is_tag_fresh returns False when the min-age eligible tag exceeds the allowed age."""
+        action = GithubAction("actions/checkout", "v4")
+        action.min_age_tag_date = datetime.datetime.now(datetime.UTC) - datetime.timedelta(days=151)
+
+        assert action.is_tag_fresh(150) is False
+
+    def test_is_tag_fresh_when_all_tags_are_too_new_for_min_age(self) -> None:
+        """Verify is_tag_fresh returns True when semver tags exist but none meet min-age yet."""
+        action = GithubAction("actions/checkout", "v4")
+        action.has_semver_tags = True
+        action.min_age_tag_date = None
+
+        assert action.is_tag_fresh(150) is True
+
+    def test_is_tag_fresh_when_no_semver_tags(self) -> None:
+        """Verify is_tag_fresh returns False when no semver tags exist."""
+        action = GithubAction("actions/checkout", "v4")
+        action.has_semver_tags = False
+        action.min_age_tag_date = None
+
+        assert action.is_tag_fresh(150) is False
+
 
 class TestUniqGithubActions:
     """Unit tests for UniqGithubActions collection."""
@@ -662,6 +731,29 @@ class TestUniqGithubActions:
 
         with pytest.raises(GithubActionNotFoundError):
             uniq_actions.get_item(name="actions/checkout", reference="v6.0.0", description="v4.0.0")
+
+    def test_get_stale_actions_returns_stale_actions(self) -> None:
+        """Verify get_stale_actions returns actions with min-age eligible tags older than the threshold."""
+        uniq = UniqGithubActions()
+        fresh = GithubAction("actions/checkout", "v4")
+        fresh.min_age_tag_date = datetime.datetime.now(datetime.UTC) - datetime.timedelta(days=10)
+        stale = GithubAction("actions/setup-python", "v5")
+        stale.min_age_tag_date = datetime.datetime.now(datetime.UTC) - datetime.timedelta(days=200)
+        uniq.add(fresh)
+        uniq.add(stale)
+
+        result = uniq.get_stale_actions(150)
+
+        assert result == [stale]
+
+    def test_get_stale_actions_returns_empty_when_check_disabled(self) -> None:
+        """Verify get_stale_actions skips the check when max_age_days is 0."""
+        uniq = UniqGithubActions()
+        stale = GithubAction("actions/setup-python", "v5")
+        stale.min_age_tag_date = datetime.datetime.now(datetime.UTC) - datetime.timedelta(days=200)
+        uniq.add(stale)
+
+        assert uniq.get_stale_actions(0) == []
 
     @patch("gh_action_pulse.actions.GithubAction.get_fully_qualified")
     def test_get_fully_qualified_contents(self, mock_get_fq: MagicMock) -> None:
