@@ -9,7 +9,12 @@ import pytest
 from github.GithubException import GithubException
 from testfixtures import LogCapture, log_capture
 
-from gh_action_pulse.actions import GithubAction, GithubActionNotFoundError, UniqGithubActions
+from gh_action_pulse.actions import (
+    GithubAction,
+    GithubActionArchivedError,
+    GithubActionNotFoundError,
+    UniqGithubActions,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -54,6 +59,7 @@ class TestGithubAction:
         action = GithubAction("actions/checkout", "v4")
         mock_g = MagicMock()
         mock_repo = MagicMock()
+        mock_repo.archived = False
         mock_g.get_repo.return_value = mock_repo
 
         # WHEN
@@ -64,6 +70,17 @@ class TestGithubAction:
         mock_set_actual.assert_called_once()
         mock_set_desc.assert_called_once()
         mock_set_rec.assert_called_once()
+
+    def test_get_fully_qualified_raises_for_archived_repo(self) -> None:
+        """Verify that get_fully_qualified exits when the action repository is archived."""
+        action = GithubAction("actions/checkout", "v4")
+        mock_g = MagicMock()
+        mock_repo = MagicMock()
+        mock_repo.archived = True
+        mock_g.get_repo.return_value = mock_repo
+
+        with pytest.raises(GithubActionArchivedError, match=r"actions/checkout.*archived"):
+            action.get_fully_qualified(mock_g, 0)
 
     def test__set_actual_reference_type_and_date_with_tag(self) -> None:
         """Verify that _set_actual_reference_type_and_date correctly identifies the reference type and date."""

@@ -43,6 +43,15 @@ class GithubActionNotFoundError(Exception):
     """Exception raised when a GitHub Action cannot be found."""
 
 
+class GithubActionArchivedError(Exception):
+    """Exception raised when a GitHub Action repository is archived."""
+
+    def __init__(self, repo_name: str) -> None:
+        """Initialize with the archived repository name."""
+        self.repo_name = repo_name
+        super().__init__(f"GitHub Action repository '{repo_name}' is archived.")
+
+
 class GithubAction:
     """Represents a GitHub Action reference found in workflow or action files."""
 
@@ -91,6 +100,9 @@ class GithubAction:
         repo_name = "/".join(self.name.split("/")[:2])
         logger.debug("Get Repo access to %s (full action name: %s)", repo_name, self.name)
         self.repo = g.get_repo(repo_name)  # missing exception catch here
+        if self.repo.archived:
+            logger.error("GitHub Action repository '%s' is archived.", repo_name)
+            raise GithubActionArchivedError(repo_name)
         self.min_age = min_age
         self._set_actual_reference_type_and_date()
         logger.info("actual reference type is %s at date %s", self.actual.reference_type, self.actual.date)
