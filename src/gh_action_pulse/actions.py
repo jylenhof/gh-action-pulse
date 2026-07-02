@@ -188,14 +188,14 @@ class GithubAction:
             if semver.Version.is_valid(clean_name):
                 valid_semver_tags.append(tag)
         valid_semver_tags.sort(key=lambda tag: semver.Version.parse(tag.name.lstrip("v")), reverse=True)
-        self.has_semver_tags = bool(valid_semver_tags)
+        self.has_semver_tags = len(valid_semver_tags) != 0
         return valid_semver_tags
 
-    def is_tag_fresh(self, max_age_days: int) -> bool:
-        """Return True when the min-age eligible tag is not older than max_age_days."""
+    def is_tag_fresh(self, max_age: int) -> bool:
+        """Return True when the min-age eligible tag is not older than max_age."""
         if self.min_age_tag_date is not None:
             age = datetime.datetime.now(datetime.UTC) - self.min_age_tag_date.astimezone(datetime.UTC)
-            return age.days <= max_age_days
+            return age.days <= max_age
         return bool(self.has_semver_tags)
 
     def _set_recommended_for_sha(self, valid_semver_tags: list) -> None:
@@ -308,8 +308,8 @@ class UniqGithubActions:
         """Update all actions in the collection with metadata from the GitHub API."""
         return {action.get_fully_qualified(g, min_age) for action in self.get_actions()}
 
-    def get_stale_actions(self, max_age_days: int) -> list[GithubAction]:
-        """Return actions whose min-age eligible tag is older than max_age_days."""
-        if max_age_days <= 0:
+    def get_stale_actions(self, max_age: int) -> list[GithubAction]:
+        """Return actions whose min_age eligible tag is older than max_age."""
+        if max_age <= 0:
             return []
-        return [action for action in self.get_actions() if not action.is_tag_fresh(max_age_days)]
+        return [action for action in self.get_actions() if not action.is_tag_fresh(max_age)]

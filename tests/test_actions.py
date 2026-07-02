@@ -747,7 +747,7 @@ class TestUniqGithubActions:
         assert result == [stale]
 
     def test_get_stale_actions_returns_empty_when_check_disabled(self) -> None:
-        """Verify get_stale_actions skips the check when max_age_days is 0."""
+        """Verify get_stale_actions skips the check when max_age is 0."""
         uniq = UniqGithubActions()
         stale = GithubAction("actions/setup-python", "v5")
         stale.min_age_tag_date = datetime.datetime.now(datetime.UTC) - datetime.timedelta(days=200)
