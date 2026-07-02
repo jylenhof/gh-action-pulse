@@ -39,15 +39,15 @@ def validate_min_age_cli(min_age: int) -> int:
 
 
 def validate_max_age(max_age: int) -> int:
-    """Validate that too_old_in_days is within the allowed range."""
+    """Validate that max_age is within the allowed range."""
     if max_age < 0:
-        msg: str = "too_old_in_days must be 0 or greater."
+        msg: str = "max_age must be 0 or greater."
         raise ValueError(msg)
     return max_age
 
 
 def validate_max_age_cli(max_age: int) -> int:
-    """Typer callback that validates too_old_in_days using shared business logic."""
+    """Typer callback that validates max_age using shared business logic."""
     try:
         return validate_max_age(max_age)
     except ValueError as exc:
