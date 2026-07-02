@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.0](https://github.com/jylenhof/gh-action-pulse/compare/v0.1.1...v0.2.0) (2026-07-02)
+
+
+### Features
+
+* Add --max-days CLI check for stale upstream action tags. ([#31](https://github.com/jylenhof/gh-action-pulse/issues/31)) ([711c0b7](https://github.com/jylenhof/gh-action-pulse/commit/711c0b7701c024b75767bc2e253258e6a05cb39f))
+
 ## [0.1.0](https://github.com/jylenhof/gh-action-pulse/compare/v0.0.13...v0.1.0) (2026-06-17)
 
 
