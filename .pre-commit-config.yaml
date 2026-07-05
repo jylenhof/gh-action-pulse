@@ -1,6 +1,16 @@
 ---
 fail_fast: false
+default_install_hook_types:
+  - pre-commit
+  - commit-msg
 repos:
+  - repo: https://github.com/commit-check/commit-check
+    rev: v2.10.0
+    hooks:
+      - id: check-message
+      - id: check-branch
+      - id: check-author-name
+      - id: check-author-email
   - repo: builtin
     hooks:
       - id: trailing-whitespace
