@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.3.0](https://github.com/jylenhof/gh-action-pulse/compare/v0.2.0...v0.3.0) (2026-07-06)
+
+
+### Features
+
+* add --version CLI option ([#41](https://github.com/jylenhof/gh-action-pulse/issues/41)) ([4be3095](https://github.com/jylenhof/gh-action-pulse/commit/4be309554af0a6643a3b17ecab5546cc842b49f6))
+* archive repo detection ([#37](https://github.com/jylenhof/gh-action-pulse/issues/37)) ([4a65815](https://github.com/jylenhof/gh-action-pulse/commit/4a658159b4dbdce95772b9af89b691d14281fa29))
+* update action references when GitHub redirects the repository name ([#40](https://github.com/jylenhof/gh-action-pulse/issues/40)) ([5b42eff](https://github.com/jylenhof/gh-action-pulse/commit/5b42effc2af9ed4a98a690c5510fd85353293561))
+
+
+### Bug Fixes
+
+* sha branch recommendation ([#39](https://github.com/jylenhof/gh-action-pulse/issues/39)) ([aae06bf](https://github.com/jylenhof/gh-action-pulse/commit/aae06bf4a688e9ec298f802563c57794628ef67b))
+
 ## [0.2.0](https://github.com/jylenhof/gh-action-pulse/compare/v0.1.1...v0.2.0) (2026-07-02)
 
 
