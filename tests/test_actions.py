@@ -84,7 +84,7 @@ class TestGithubAction:
         with pytest.raises(GithubActionArchivedError, match=r"actions/checkout.*archived"):
             action.get_fully_qualified(mock_g, 0)
 
-    def test_get_fully_qualified_sets_canonical_name_on_repo_redirect(self) -> None:
+    def test_get_fully_qualified_sets_repo_canonical_name_on_repo_redirect(self) -> None:
         """Verify that get_fully_qualified records the canonical name when GitHub redirects the repo."""
         action = GithubAction("GoogleCloudPlatform/release-please-action", "v4")
         mock_g = MagicMock()
@@ -100,7 +100,7 @@ class TestGithubAction:
         ):
             action.get_fully_qualified(mock_g, 0)
 
-        assert action.recommended.canonical_name == "googleapis/release-please-action"
+        assert action.recommended.repo_canonical_name == "googleapis/release-please-action"
 
     def test_get_fully_qualified_preserves_subpath_on_repo_redirect(self) -> None:
         """Verify that subpaths are preserved when only the owner/repo part redirects."""
@@ -118,10 +118,10 @@ class TestGithubAction:
         ):
             action.get_fully_qualified(mock_g, 0)
 
-        assert action.recommended.canonical_name == "new-org/some-repo/actions/my-action"
+        assert action.recommended.repo_canonical_name == "new-org/some-repo/actions/my-action"
 
     @pytest.mark.parametrize(
-        ("canonical_name", "actual_reference", "actual_description", "recommended", "expected"),
+        ("repo_canonical_name", "actual_reference", "actual_description", "recommended", "expected"),
         [
             (
                 "googleapis/release-please-action",
@@ -149,7 +149,7 @@ class TestGithubAction:
     )
     def test_get_updated_uses_replacement(
         self,
-        canonical_name: str | None,
+        repo_canonical_name: str | None,
         actual_reference: str,
         actual_description: str | None,
         recommended: tuple[str | None, str | None],
@@ -157,7 +157,7 @@ class TestGithubAction:
     ) -> None:
         """Verify updated uses replacement handles redirects and version updates."""
         action = GithubAction("actions/checkout", actual_reference, actual_description)
-        action.recommended.canonical_name = canonical_name
+        action.recommended.repo_canonical_name = repo_canonical_name
         action.recommended.reference, action.recommended.description = recommended
 
         assert action.get_updated_uses_replacement(actual_reference, actual_description) == expected
