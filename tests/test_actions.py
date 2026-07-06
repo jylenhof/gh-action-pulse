@@ -60,6 +60,7 @@ class TestGithubAction:
         mock_g = MagicMock()
         mock_repo = MagicMock()
         mock_repo.archived = False
+        mock_repo.full_name = "actions/checkout"
         mock_g.get_repo.return_value = mock_repo
 
         # WHEN
@@ -77,10 +78,89 @@ class TestGithubAction:
         mock_g = MagicMock()
         mock_repo = MagicMock()
         mock_repo.archived = True
+        mock_repo.full_name = "actions/checkout"
         mock_g.get_repo.return_value = mock_repo
 
         with pytest.raises(GithubActionArchivedError, match=r"actions/checkout.*archived"):
             action.get_fully_qualified(mock_g, 0)
+
+    def test_get_fully_qualified_sets_canonical_name_on_repo_redirect(self) -> None:
+        """Verify that get_fully_qualified records the canonical name when GitHub redirects the repo."""
+        action = GithubAction("GoogleCloudPlatform/release-please-action", "v4")
+        mock_g = MagicMock()
+        mock_repo = MagicMock()
+        mock_repo.archived = False
+        mock_repo.full_name = "googleapis/release-please-action"
+        mock_g.get_repo.return_value = mock_repo
+
+        with (
+            patch("gh_action_pulse.actions.GithubAction._set_actual_reference_type_and_date"),
+            patch("gh_action_pulse.actions.GithubAction._set_actual_description_type"),
+            patch("gh_action_pulse.actions.GithubAction._set_recommended_reference_and_date"),
+        ):
+            action.get_fully_qualified(mock_g, 0)
+
+        assert action.recommended.canonical_name == "googleapis/release-please-action"
+
+    def test_get_fully_qualified_preserves_subpath_on_repo_redirect(self) -> None:
+        """Verify that subpaths are preserved when only the owner/repo part redirects."""
+        action = GithubAction("old-org/some-repo/actions/my-action", "v1")
+        mock_g = MagicMock()
+        mock_repo = MagicMock()
+        mock_repo.archived = False
+        mock_repo.full_name = "new-org/some-repo"
+        mock_g.get_repo.return_value = mock_repo
+
+        with (
+            patch("gh_action_pulse.actions.GithubAction._set_actual_reference_type_and_date"),
+            patch("gh_action_pulse.actions.GithubAction._set_actual_description_type"),
+            patch("gh_action_pulse.actions.GithubAction._set_recommended_reference_and_date"),
+        ):
+            action.get_fully_qualified(mock_g, 0)
+
+        assert action.recommended.canonical_name == "new-org/some-repo/actions/my-action"
+
+    @pytest.mark.parametrize(
+        ("canonical_name", "actual_reference", "actual_description", "recommended", "expected"),
+        [
+            (
+                "googleapis/release-please-action",
+                "abc123",
+                "v4.0.0",
+                ("def456", "v4.1.0"),
+                "googleapis/release-please-action@def456 # v4.1.0",
+            ),
+            (
+                "googleapis/release-please-action",
+                "abc123",
+                "v4.0.0",
+                (None, None),
+                "googleapis/release-please-action@abc123 # v4.0.0",
+            ),
+            (
+                None,
+                "abc123",
+                "v4.0.0",
+                ("def456", "v4.1.0"),
+                "actions/checkout@def456 # v4.1.0",
+            ),
+            (None, "abc123", None, (None, None), None),
+        ],
+    )
+    def test_get_updated_uses_replacement(
+        self,
+        canonical_name: str | None,
+        actual_reference: str,
+        actual_description: str | None,
+        recommended: tuple[str | None, str | None],
+        expected: str | None,
+    ) -> None:
+        """Verify updated uses replacement handles redirects and version updates."""
+        action = GithubAction("actions/checkout", actual_reference, actual_description)
+        action.recommended.canonical_name = canonical_name
+        action.recommended.reference, action.recommended.description = recommended
+
+        assert action.get_updated_uses_replacement(actual_reference, actual_description) == expected
 
     def test__set_actual_reference_type_and_date_with_tag(self) -> None:
         """Verify that _set_actual_reference_type_and_date correctly identifies the reference type and date."""

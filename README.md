@@ -7,6 +7,7 @@
 - **Automatic Scanning**: Detects `uses:` statements across `.github/workflows` and `.github/actions`.
 - **Reference Identification**: Determines if an action is pinned to a specific commit SHA, a tag, or a branch.
 - **Update Recommendations**: Queries the GitHub API to compare your current references against the latest stable semantic version (SemVer) tags.
+- **Repository Redirects**: Detects when an action repository has moved (for example `GoogleCloudPlatform/release-please-action` → `googleapis/release-please-action`) and updates workflow files to the canonical name.
 - **Metadata Insights**: Retrieves commit dates and reference types to help evaluate the "freshness" of your CI/CD dependencies.
 
 ## Setup
@@ -49,7 +50,6 @@ Randoms items
 - Add E2E tests with appropriate workflow (pytest and/or bats)
 - Be able to check for nodejs version in upstream repo
 - Maybe configuration file with some ignore parameters or specific rules for some workflows (needs thinking)
-- Check eventual redirection of action to update to new URL (is there an example of this ?)
 - Change to versioned version of tools in mise.toml when near stable version (could depend on tools)
 
 ## CONTRIBUTING
