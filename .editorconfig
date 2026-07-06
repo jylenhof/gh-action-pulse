@@ -19,3 +19,6 @@ max_line_length = unset
 
 [*.md]
 max_line_length = unset
+
+# Exclude own LICENSE format
+[LICENSE]
