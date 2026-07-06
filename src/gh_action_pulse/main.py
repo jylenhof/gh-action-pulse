@@ -10,6 +10,7 @@ from typing import Annotated
 import typer
 from github import Auth, Github
 
+from gh_action_pulse import __version__
 from gh_action_pulse.actions import GithubAction, GithubActionArchivedError, UniqGithubActions
 from gh_action_pulse.full_list_of_existing_actions import FullListOfExistingActions
 from gh_action_pulse.helpers.constants import DEFAULT_MAX_AGE, DEFAULT_MIN_AGE, MAX_MIN_AGE, SEARCH_CONFIGS
@@ -17,6 +18,13 @@ from gh_action_pulse.helpers.github import get_github_token
 
 logger = logging.getLogger(__name__)
 app = typer.Typer()
+
+
+def version_callback(*, value: bool) -> None:
+    """Print the package version and exit when --version is passed."""
+    if value:
+        typer.echo(__version__)
+        raise typer.Exit
 
 
 def validate_min_age(min_age: int) -> int:
@@ -86,6 +94,15 @@ def warn_about_stale_actions(stale_actions: list[GithubAction], max_age: int) ->
 @app.command(help="Scan for 'uses:' statements in GitHub Actions workflow and action definition files.")
 def main(
     *,  # to avoid ruff alert
+    _version: Annotated[
+        bool,
+        typer.Option(
+            "--version",
+            callback=version_callback,
+            is_eager=True,
+            help="Show the version and exit.",
+        ),
+    ] = False,
     dry_run: Annotated[
         bool,
         typer.Option(
