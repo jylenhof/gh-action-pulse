@@ -8,7 +8,7 @@ urls = { "repository" = "https://github.com/jylenhof/gh-action-pulse" }
 dependencies = [
   "pygithub>=2.9.0,<3.0.0",
   "semver>=3.0.4,<4.0.0",
-  "typer>=0.25.1,<0.26.0",
+  "typer>=0.26.0,<0.27.0",
 ]
 dynamic = [
   "version",
