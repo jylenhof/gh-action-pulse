@@ -8,8 +8,6 @@
 
 --github-action-omit
 
---too-old-in-days
-
 -----
 
 later
