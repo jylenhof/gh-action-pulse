@@ -37,6 +37,7 @@ class Recommendation:
     reference: str | None = None
     date: datetime.datetime | None = None
     description: str | None = None
+    repo_canonical_name: str | None = None
 
 
 class GithubActionNotFoundError(Exception):
@@ -100,6 +101,7 @@ class GithubAction:
         repo_name = "/".join(self.name.split("/")[:2])
         logger.debug("Get Repo access to %s (full action name: %s)", repo_name, self.name)
         self.repo = g.get_repo(repo_name)  # missing exception catch here
+        self._set_repo_canonical_name(repo_name)
         if self.repo.archived:
             logger.error("GitHub Action repository '%s' is archived.", repo_name)
             raise GithubActionArchivedError(repo_name)
@@ -110,7 +112,7 @@ class GithubAction:
         logger.info("actual description type is %s", self.actual.description_type)
         self._set_recommended_reference_and_date()
         logger.info(
-            "recommendation is ref: %s at date: %s with description:%s",
+            "recommendation is ref: %s at date: %s with description: %s",
             self.recommended.reference,
             self.recommended.date,
             self.recommended.description,
@@ -123,6 +125,36 @@ class GithubAction:
             self.actual.description,
         )
         return self
+
+    def _set_repo_canonical_name(self, requested_repo: str) -> None:
+        """Set repo_canonical_name when GitHub redirects the repository to a new owner or name."""
+        canonical_repo = self.repo.full_name
+        if canonical_repo.casefold() == requested_repo.casefold():
+            self.recommended.repo_canonical_name = None
+            return
+
+        name_parts = self.name.split("/")
+        subpath = "/".join(name_parts[2:])
+        self.recommended.repo_canonical_name = f"{canonical_repo}/{subpath}" if subpath else canonical_repo
+        logger.info("Action '%s' redirects to '%s'", self.name, self.recommended.repo_canonical_name)
+
+    def get_updated_uses_replacement(
+        self,
+        actual_reference: str,
+        actual_description: str | None,
+    ) -> str | None:
+        """Return replacement content after 'uses: ', or None when no update is needed."""
+        action_name = self.recommended.repo_canonical_name or self.name
+
+        if self.recommended.reference and self.recommended.description:
+            return f"{action_name}@{self.recommended.reference} # {self.recommended.description}"
+
+        if self.recommended.repo_canonical_name is not None:
+            if actual_description:
+                return f"{action_name}@{actual_reference} # {actual_description}"
+            return f"{action_name}@{actual_reference}"
+
+        return None
 
     def _set_actual_reference_type_and_date(self) -> None:
         """Determines the type and date of the actual reference."""

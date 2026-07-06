@@ -165,13 +165,10 @@ def main(
                     actual_description: str | None = match.group(3) if match.group(3) is not None else None
                     uniq_action = uniq_github_actions.get_item(name, actual_reference, actual_description)
                     logger.info("from:\n%s", file_lines[line_number - 1])
-                    if uniq_action.recommended.reference and uniq_action.recommended.description:
-                        replacement_pattern = (
-                            r"\1@" + uniq_action.recommended.reference + " # " + uniq_action.recommended.description
-                        )
+                    if replacement := uniq_action.get_updated_uses_replacement(actual_reference, actual_description):
                         file_lines[line_number - 1] = re.sub(
-                            pattern=r"^(\s*[-]?\s{0,1}uses:\s*[^@\s]+)@[^\s#]+(?:\s+#\s+.+)?",
-                            repl=replacement_pattern,
+                            pattern=r"^(\s*[-]?\s{0,1}uses:\s*)(?:[^@\s]+)@[^\s#]+(?:\s+#\s+.+)?",
+                            repl=r"\1" + replacement,
                             string=file_lines[line_number - 1],
                         )
                         logger.info("to:\n%s", file_lines[line_number - 1])
