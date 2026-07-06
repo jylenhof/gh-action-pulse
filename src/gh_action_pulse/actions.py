@@ -112,7 +112,7 @@ class GithubAction:
         logger.info("actual description type is %s", self.actual.description_type)
         self._set_recommended_reference_and_date()
         logger.info(
-            "recommendation is ref: %s at date: %s with description:%s",
+            "recommendation is ref: %s at date: %s with description: %s",
             self.recommended.reference,
             self.recommended.date,
             self.recommended.description,
