@@ -1,13 +1,26 @@
 """Tests for CLI validation helpers in main."""
 
+from unittest.mock import patch
+
 import pytest
 import typer
+from typer.testing import CliRunner
 
-from gh_action_pulse.main import validate_max_age, validate_max_age_cli, validate_min_age, validate_min_age_cli
+from gh_action_pulse.main import app, validate_max_age, validate_max_age_cli, validate_min_age, validate_min_age_cli
+
+runner = CliRunner()
 
 
 class TestValidateCliOptions:
     """Unit tests for CLI option validation helpers."""
+
+    @patch("gh_action_pulse.main.__version__", "1.2.3")
+    def test_version_option_prints_version_and_exits(self) -> None:
+        """Verify that --version prints the package version and exits successfully."""
+        result = runner.invoke(app, ["--version"])
+
+        assert result.exit_code == 0
+        assert result.output.strip() == "1.2.3"
 
     def test_validate_max_age_accepts_zero(self) -> None:
         """Verify that 0 is accepted to disable the freshness check."""
