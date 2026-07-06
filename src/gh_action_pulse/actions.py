@@ -216,14 +216,15 @@ class GithubAction:
                 self._set_recommended_reference_and_date_to_tag_if_exists(valid_semver_tags)
                 return
             case "branch":
-                self._set_recommended_with_fallback(valid_semver_tags, self.actual.reference)
+                if self.actual.description is not None:
+                    self._set_recommended_with_fallback(valid_semver_tags, self.actual.description)
                 return
             case _:
                 if self._actual_sha_matches_tag():
                     self._set_recommended_reference_and_date_to_tag_if_exists(valid_semver_tags)
 
                 if self.recommended.reference is None:
-                    self._set_recommended_to_branch(self.actual.reference)
+                    self._set_recommended_to_latest_related_branch()
 
     def _actual_sha_matches_tag(self) -> bool:
         return any(tag.commit.commit.sha == self.actual.reference for tag in self.repo.get_tags())
@@ -237,6 +238,37 @@ class GithubAction:
             self.recommended.description = branch_name
         except GithubException:
             logger.exception("Failed to fetch branch '%s', that should not happen.", branch_name)
+
+    def _set_recommended_to_latest_related_branch(self) -> None:
+        """Recommend the newest branch tip among branches that contain the pinned SHA."""
+        try:
+            latest_branch = None
+            latest_date = None
+            for branch in self.repo.get_branches():
+                try:
+                    comparison = self.repo.compare(self.actual.reference, branch.commit.sha)
+                except GithubException:
+                    continue
+                if comparison.status not in ("behind", "identical"):
+                    continue
+                branch_date = branch.commit.commit.committer.date
+                if latest_date is None or branch_date > latest_date:
+                    latest_date = branch_date
+                    latest_branch = branch
+            if latest_branch is not None:
+                self._set_recommended_to_branch(latest_branch.name)
+            else:
+                logger.warning(
+                    "No branch found containing commit '%s' for action '%s'.",
+                    self.actual.reference,
+                    self.name,
+                )
+        except GithubException:
+            logger.exception(
+                "Failed to find branches related to commit '%s' for action '%s'.",
+                self.actual.reference,
+                self.name,
+            )
 
     def _set_recommended_with_fallback(self, valid_tags: list, branch_name: str) -> None:
         """Tries to recommend the latest tag, falling back to a branch if the tag is older than the current pin."""

@@ -341,7 +341,7 @@ class TestGithubAction:
 
         action._set_recommended_for_sha(mock_valid_semver_tags)
 
-        assert mock__set_recommended_reference_and_date_to_tag_if_exists.call_once_with(mock_valid_semver_tags)
+        mock__set_recommended_reference_and_date_to_tag_if_exists.assert_called_once_with(mock_valid_semver_tags)
 
     @patch("gh_action_pulse.actions.GithubAction._set_recommended_with_fallback")
     def test__set_recommended_for_sha_when_description_is_branch(
@@ -356,14 +356,14 @@ class TestGithubAction:
 
         action._set_recommended_for_sha(mock_valid_semver_tags)
 
-        assert mock__set_recommended_with_fallback.call_once_with(mock_valid_semver_tags, "main")
+        mock__set_recommended_with_fallback.assert_called_once_with(mock_valid_semver_tags, "main")
 
     @patch("gh_action_pulse.actions.GithubAction._actual_sha_matches_tag")
     @patch("gh_action_pulse.actions.GithubAction._set_recommended_reference_and_date_to_tag_if_exists")
-    @patch("gh_action_pulse.actions.GithubAction._set_recommended_to_branch")
+    @patch("gh_action_pulse.actions.GithubAction._set_recommended_to_latest_related_branch")
     def test__set_recommended_for_sha_when_description_is_bullshit_or_none_and_sha_is_tag_related(
         self,
-        mock__set_recommended_to_branch: MagicMock,
+        mock__set_recommended_to_latest_related_branch: MagicMock,
         mock__set_recommended_reference_and_date_to_tag_if_exists: MagicMock,
         mock__actual_sha_matches_tag: MagicMock,
     ) -> None:
@@ -374,19 +374,23 @@ class TestGithubAction:
         action.actual.description_type = "bullshit"
         mock_valid_semver_tags = [MagicMock(), MagicMock()]
         mock__actual_sha_matches_tag.return_value = True
-        action.recommended.reference = "v6.0.0"
+
+        def set_tag_recommendation(_valid_semver_tags: list) -> None:
+            action.recommended.reference = "sha-for-v6"
+
+        mock__set_recommended_reference_and_date_to_tag_if_exists.side_effect = set_tag_recommendation
 
         action._set_recommended_for_sha(mock_valid_semver_tags)
 
-        assert mock__set_recommended_reference_and_date_to_tag_if_exists.call_once_with(mock_valid_semver_tags)
-        assert mock__set_recommended_to_branch.call_once_with("main")
+        mock__set_recommended_reference_and_date_to_tag_if_exists.assert_called_once_with(mock_valid_semver_tags)
+        mock__set_recommended_to_latest_related_branch.assert_not_called()
 
     @patch("gh_action_pulse.actions.GithubAction._actual_sha_matches_tag")
     @patch("gh_action_pulse.actions.GithubAction._set_recommended_reference_and_date_to_tag_if_exists")
-    @patch("gh_action_pulse.actions.GithubAction._set_recommended_to_branch")
+    @patch("gh_action_pulse.actions.GithubAction._set_recommended_to_latest_related_branch")
     def test__set_recommended_for_sha_when_description_is_bullshit_or_none_and_sha_is_not_tag_related(
         self,
-        mock__set_recommended_to_branch: MagicMock,
+        mock__set_recommended_to_latest_related_branch: MagicMock,
         mock__set_recommended_reference_and_date_to_tag_if_exists: MagicMock,
         mock__actual_sha_matches_tag: MagicMock,
     ) -> None:
@@ -401,8 +405,8 @@ class TestGithubAction:
 
         action._set_recommended_for_sha(mock_valid_semver_tags)
 
-        assert mock__set_recommended_reference_and_date_to_tag_if_exists.call_count == 0
-        assert mock__set_recommended_to_branch.call_once_with("main")
+        mock__set_recommended_reference_and_date_to_tag_if_exists.assert_not_called()
+        mock__set_recommended_to_latest_related_branch.assert_called_once_with()
 
     def test__actual_sha_matches_tag(self) -> None:
         """Verify that _actual_sha_matches_tag correctly identifies when the actual sha matches a tag."""
@@ -446,6 +450,58 @@ class TestGithubAction:
         action._set_recommended_to_branch("main")
 
         capture.check(("gh_action_pulse.actions", "ERROR", "Failed to fetch branch 'main', that should not happen."))
+
+    def test__set_recommended_to_latest_related_branch_picks_newest_tip(self) -> None:
+        """Checks that the newest branch tip is recommended among branches containing the SHA."""
+        action = GithubAction("actions/checkout", "sha-for-main-old", None)
+        mock_repo = MagicMock()
+        mock_main = MagicMock()
+        mock_main.name = "main"
+        mock_main.commit.sha = "sha-for-main-new"
+        mock_main.commit.commit.committer.date = datetime.datetime(2026, 1, 3, tzinfo=datetime.UTC)
+        mock_develop = MagicMock()
+        mock_develop.name = "develop"
+        mock_develop.commit.sha = "sha-for-develop"
+        mock_develop.commit.commit.committer.date = datetime.datetime(2025, 1, 3, tzinfo=datetime.UTC)
+        mock_repo.get_branches.return_value = [mock_main, mock_develop]
+        mock_repo.get_branch.return_value = mock_main
+
+        def compare_side_effect(_base: str, head: str) -> MagicMock:
+            comparison = MagicMock()
+            comparison.status = "behind" if head in {"sha-for-main-new", "sha-for-develop"} else "diverged"
+            return comparison
+
+        mock_repo.compare.side_effect = compare_side_effect
+        action.repo = mock_repo
+
+        action._set_recommended_to_latest_related_branch()
+
+        assert action.recommended.reference == "sha-for-main-new"
+        assert action.recommended.description == "main"
+        mock_repo.get_branch.assert_called_once_with("main")
+
+    @log_capture()
+    def test__set_recommended_to_latest_related_branch_with_no_matches(self, capture: LogCapture) -> None:
+        """Checks that a warning is logged when no branch contains the pinned SHA."""
+        action = GithubAction("actions/checkout", "sha-for-main-old", None)
+        mock_repo = MagicMock()
+        mock_branch = MagicMock()
+        mock_branch.name = "main"
+        mock_branch.commit.sha = "sha-for-main-new"
+        mock_repo.get_branches.return_value = [mock_branch]
+        mock_repo.compare.return_value = MagicMock(status="diverged")
+        action.repo = mock_repo
+
+        action._set_recommended_to_latest_related_branch()
+
+        assert action.recommended.reference is None
+        capture.check(
+            (
+                "gh_action_pulse.actions",
+                "WARNING",
+                "No branch found containing commit 'sha-for-main-old' for action 'actions/checkout'.",
+            )
+        )
 
     @patch("gh_action_pulse.actions.GithubAction._set_recommended_reference_and_date_to_tag_if_exists")
     @patch("gh_action_pulse.actions.GithubAction._set_recommended_to_branch")

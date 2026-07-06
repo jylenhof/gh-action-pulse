@@ -28,7 +28,6 @@ repos:
         name: editorconfig-checker
         entry: ec
         language: system
-        exclude: 'LICENSE'
       - id: rumdl # markdown linter
         name: rumdl
         entry: "rumdl check"
