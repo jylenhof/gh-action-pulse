@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.1](https://github.com/jylenhof/gh-action-pulse/compare/v0.3.0...v0.3.1) (2026-07-07)
+
+
+### Documentation
+
+* update README.md and CONTRIBUTING.md ([#46](https://github.com/jylenhof/gh-action-pulse/issues/46)) ([295f4ab](https://github.com/jylenhof/gh-action-pulse/commit/295f4ab2c7ba7f94ad43fe013cb13b69a26ffc00))
+
 ## [0.3.0](https://github.com/jylenhof/gh-action-pulse/compare/v0.2.0...v0.3.0) (2026-07-06)
 
 
