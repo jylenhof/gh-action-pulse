@@ -1,50 +1,140 @@
 # gh-action-pulse
 
-`gh-action-pulse` is a utility designed to monitor and analyze the health of GitHub Actions dependencies within a repository. It scans your workflow and action definition files to identify which actions are being used and updates them to the last existing tag using (./rules.md)
+`gh-action-pulse` scans a repository for GitHub Actions `uses:` references, checks them against the GitHub API, and rewrites them to safer or more current references when a better upstream target exists.
+
+It is aimed at repositories that want to keep GitHub Actions dependencies understandable, current, and pinned with more confidence.
 
 ## Key Features
 
-- **Automatic Scanning**: Detects `uses:` statements across `.github/workflows` and `.github/actions`.
-- **Reference Identification**: Determines if an action is pinned to a specific commit SHA, a tag, or a branch.
-- **Update Recommendations**: Queries the GitHub API to compare your current references against the latest stable semantic version (SemVer) tags.
-- **Repository Redirects**: Detects when an action repository has moved (for example `GoogleCloudPlatform/release-please-action` → `googleapis/release-please-action`) and updates workflow files to the canonical name.
-- **Metadata Insights**: Retrieves commit dates and reference types to help evaluate the "freshness" of your CI/CD dependencies.
+- **Automatic scanning**: Detects `uses:` statements across workflow and reusable action files.
+- **Reference classification**: Distinguishes whether an action is currently pinned to a commit SHA, tag, or branch.
+- **Recommendation engine**: Looks up upstream metadata and recommends an updated reference based on available SemVer tags and branch state.
+- **Repository redirect handling**: Rewrites moved repositories to their canonical name when GitHub reports a redirect.
+- **Freshness checks**: Warns or fails when the newest eligible SemVer tag is older than your configured threshold.
+
+## How It Works
+
+For each detected `uses:` line, `gh-action-pulse`:
+
+1. Finds GitHub Actions references in the configured workflow and action directories.
+2. Queries the GitHub API for the referenced repository.
+3. Detects whether the current reference is a tag, branch, or SHA.
+4. Selects the newest SemVer tag that is at least `--min-age` days old.
+5. Falls back to a branch recommendation when that is safer or newer than the eligible tag.
+6. Rewrites redirected repositories to their canonical upstream name.
+
+In practice, this means the tool can:
+
+- convert branch or tag references into pinned SHAs annotated with the matching tag,
+- preserve branch intent when no suitable tag exists,
+- surface stale upstream action releases with a non-zero exit code.
+
+## Example
+
+Before:
+
+```yaml
+- uses: google-github-actions/auth@v2
+```
+
+After:
+
+```yaml
+- uses: google-github-actions/auth@<commit-sha> # v2.1.10
+```
+
+If an action repository has moved, the repository name may also be rewritten to the canonical upstream location.
 
 ## Setup
 
-The tool interacts with the GitHub API and requires a GitHub Personal Access Token.
+`gh-action-pulse` talks to the GitHub API.
+
+Set a token explicitly:
 
 ```bash
 export GITHUB_TOKEN=your_github_token_here
 ```
 
-If you haven't one, there's a fallback which will create a token using gh command
+If `GITHUB_TOKEN` is not set, the tool can fall back to using the GitHub CLI authentication flow when `gh` is available.
 
-You will need python >= 3.14 to make this program works correctly.
+The project currently requires `Python >= 3.14`.
 
-## Local Installation
+## Installation
 
-```bash
-uv tool install . --force --reinstall
-```
-
-## Installation from last pypi release
-
-### Using uv
+### Install from PyPI with `uv`
 
 ```bash
 uv tool install gh-action-pulse
 ```
 
-### Using pipx
+### Install from PyPI with `pipx`
 
 ```bash
 pipx install gh-action-pulse
 ```
 
+### Install the local checkout
+
+```bash
+uv tool install . --force --reinstall
+```
+
+## CLI Usage
+
+Run against the current repository:
+
+```bash
+gh-action-pulse
+```
+
+Preview changes without writing files:
+
+```bash
+gh-action-pulse --dry-run
+```
+
+Require action tags to be at least 14 days old before they can be selected:
+
+```bash
+gh-action-pulse --min-age 14
+```
+
+Fail when the newest eligible tag is older than 180 days:
+
+```bash
+gh-action-pulse --min-age 14 --max-age 180
+```
+
+Show more detail while debugging:
+
+```bash
+gh-action-pulse --log-level DEBUG
+```
+
+Print the installed version:
+
+```bash
+gh-action-pulse --version
+```
+
+## CLI Options
+
+- `--dry-run`: show the updates without writing files.
+- `--log-level`: set the logging level (`DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL`).
+- `--min-age`: require tags to be at least this many days old before recommending them.
+- `--max-age`: fail when the chosen `--min-age`-eligible upstream tag is older than this many days. Use `0` to disable the check.
+- `--version`: print the package version and exit.
+
+## Limitations
+
+- Local actions such as `./.github/actions/my-action` are not part of the GitHub API lookup flow.
+- Recommendations depend on repositories exposing usable SemVer tags.
+- Archived action repositories cause the command to exit with an error.
+- The tool needs GitHub API access, so rate limits and authentication still apply.
+
 ## Roadmap
 
-Randoms items
+Possible future improvements:
 
 - Maybe Separate unit tests with appropriate workflow (pytest) if checks takes times
 - Add E2E tests with appropriate workflow (pytest and/or bats)
@@ -52,8 +142,6 @@ Randoms items
 - Maybe configuration file with some ignore parameters or specific rules for some workflows (needs thinking)
 - Change to versioned version of tools in mise.toml when near stable version (could depend on tools)
 
-## CONTRIBUTING
+## Contributing
 
-- Feel free to contribute ;-)
-
-Jean-Yves
+Contributions are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for the code layout, local setup, and the full list of linters and checks run in CI.
