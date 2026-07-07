@@ -1,3 +1,6 @@
+[commit]
+allow_merge_commits = false
+
 [branch]
 # https://conventional-branch.github.io/
 conventional_branch = true
