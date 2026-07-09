@@ -11,6 +11,7 @@ It is aimed at repositories that want to keep GitHub Actions dependencies unders
 - **Recommendation engine**: Looks up upstream metadata and recommends an updated reference based on available SemVer tags and branch state.
 - **Repository redirect handling**: Rewrites moved repositories to their canonical name when GitHub reports a redirect.
 - **Freshness checks**: Warns or fails when the newest eligible SemVer tag is older than your configured threshold.
+- **Node.js runtime check**: Recursively verifies that actions, including composite and local composite dependencies, run on at least a configurable minimum Node.js version (`--minimum-nodejs-version`, default `24`), failing with a dedicated exit code (`3`) when an outdated runtime is detected.
 
 ## How It Works
 
@@ -105,6 +106,12 @@ Fail when the newest eligible tag is older than 180 days:
 gh-action-pulse --min-age 14 --max-age 180
 ```
 
+Require actions to run on at least Node.js 20:
+
+```bash
+gh-action-pulse --minimum-nodejs-version 20
+```
+
 Show more detail while debugging:
 
 ```bash
@@ -123,6 +130,7 @@ gh-action-pulse --version
 - `--log-level`: set the logging level (`DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL`).
 - `--min-age`: require tags to be at least this many days old before recommending them.
 - `--max-age`: fail when the chosen `--min-age`-eligible upstream tag is older than this many days. Use `0` to disable the check.
+- `--minimum-nodejs-version`: fail when an action, or any of its composite/local dependencies, runs on a Node.js major version below this value (default `24`). Use `0` to disable the check.
 - `--version`: print the package version and exit.
 
 ## Limitations
@@ -138,7 +146,6 @@ Possible future improvements:
 
 - Maybe Separate unit tests with appropriate workflow (pytest) if checks takes times
 - Add E2E tests with appropriate workflow (pytest and/or bats)
-- Be able to check for nodejs version in upstream repo
 - Maybe configuration file with some ignore parameters or specific rules for some workflows (needs thinking)
 - Change to versioned version of tools in mise.toml when near stable version (could depend on tools)
 
