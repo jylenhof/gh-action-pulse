@@ -1,18 +1,21 @@
-"""Tests for the recursive Node.js version checker."""
+"""Tests for the recursive Node.js version checker (recommended-reference based)."""
 
 import logging
-from pathlib import Path
+from typing import TYPE_CHECKING
 from unittest.mock import MagicMock
 
-import pytest
 from github.GithubException import GithubException
 
+from gh_action_pulse.actions import GithubAction
 from gh_action_pulse.nodejs_version import (
     NodeVersionChecker,
     NodeVersionViolation,
     _Location,
     report_node_version_violations,
 )
+
+if TYPE_CHECKING:
+    import pytest
 
 
 def make_github(repo_files: dict[str, dict[str, str]]) -> MagicMock:
@@ -39,25 +42,21 @@ def make_github(repo_files: dict[str, dict[str, str]]) -> MagicMock:
     return g
 
 
-def scan(target: str) -> dict[Path, list[dict[int, str]]]:
-    """Build a minimal scan result containing a single ``uses:`` line."""
-    return {Path("wf.yml"): [{1: f"uses: {target}"}]}
-
-
-@pytest.mark.parametrize(
-    ("line", "expected"),
-    [
-        ("uses: actions/checkout@v4", "actions/checkout@v4"),
-        ("- uses: actions/checkout@v4", "actions/checkout@v4"),
-        ("- uses: actions/checkout@v4 # v4.1.1", "actions/checkout@v4"),
-        ('uses: "actions/checkout@v4"', "actions/checkout@v4"),
-        ("uses: './.github/actions/foo'", "./.github/actions/foo"),
-        ("name: not a uses line", None),
-    ],
-)
-def test_extract_target(line: str, expected: str | None) -> None:
-    """Verify targets are extracted and unquoted from scanned lines."""
-    assert NodeVersionChecker._extract_target(line) == expected
+def make_action(  # noqa: PLR0913
+    name: str,
+    *,
+    reference: str = "v1",
+    description: str | None = None,
+    recommended_reference: str | None = None,
+    recommended_description: str | None = None,
+    canonical: str | None = None,
+) -> GithubAction:
+    """Build a GithubAction with an optional recommendation, as produced by the resolver."""
+    action = GithubAction(name=name, reference=reference, actual_description=description)
+    action.recommended.reference = recommended_reference
+    action.recommended.description = recommended_description
+    action.recommended.repo_canonical_name = canonical
+    return action
 
 
 class TestResolveTarget:
@@ -87,49 +86,70 @@ class TestResolveTarget:
         assert display == "my/comp/nested@v2"
 
 
-class TestNodeVersionChecker:
-    """Behavioural tests exercising the recursive resolution."""
+class TestCheckActions:
+    """Behavioural tests exercising the recommended-reference resolution."""
 
-    def test_remote_node_action_below_minimum_is_reported(self) -> None:
-        """A remote JavaScript action older than the minimum yields a violation."""
-        g = make_github({"actions/old": {"action.yml": "runs:\n  using: node16\n  main: index.js\n"}})
+    def test_recommended_node_action_below_minimum_is_reported(self) -> None:
+        """An action whose recommended reference still runs an old Node.js version is reported."""
+        g = make_github({"actions/checkout": {"action.yml": "runs:\n  using: node20\n  main: index.js\n"}})
         checker = NodeVersionChecker(g, 24)
+        action = make_action(
+            "actions/checkout",
+            reference="v4",
+            recommended_reference="sha123",
+            recommended_description="v5.0.0",
+        )
 
-        violations = checker.check_scanned_uses(scan("actions/old@v1"))
+        violations = checker.check_actions([action])
+
+        assert len(violations) == 1
+        assert violations[0].node_version == 20
+        assert violations[0].action == "actions/checkout@v5.0.0"
+
+    def test_recommended_node_action_at_minimum_is_ok(self) -> None:
+        """An action whose recommended reference meets the minimum yields no violation."""
+        g = make_github({"actions/checkout": {"action.yml": "runs:\n  using: node24\n  main: index.js\n"}})
+        checker = NodeVersionChecker(g, 24)
+        action = make_action(
+            "actions/checkout",
+            reference="v4",
+            recommended_reference="sha",
+            recommended_description="v5",
+        )
+
+        assert not checker.check_actions([action])
+
+    def test_recommended_canonical_repository_is_used(self) -> None:
+        """The recommended canonical repository (after a redirect) is the one inspected."""
+        g = make_github({"googleapis/release-please-action": {"action.yml": "runs:\n  using: node16\n"}})
+        checker = NodeVersionChecker(g, 24)
+        action = make_action(
+            "GoogleCloudPlatform/release-please-action",
+            reference="v3",
+            recommended_reference="sha",
+            recommended_description="v4.0.0",
+            canonical="googleapis/release-please-action",
+        )
+
+        violations = checker.check_actions([action])
 
         assert len(violations) == 1
         assert violations[0].node_version == 16
+        assert violations[0].action == "googleapis/release-please-action@v4.0.0"
+
+    def test_falls_back_to_actual_reference_without_recommendation(self) -> None:
+        """When no recommendation exists, the actual reference is inspected instead."""
+        g = make_github({"actions/old": {"action.yml": "runs:\n  using: node16\n"}})
+        checker = NodeVersionChecker(g, 24)
+        action = make_action("actions/old", reference="v1", description="v1")
+
+        violations = checker.check_actions([action])
+
+        assert len(violations) == 1
         assert violations[0].action == "actions/old@v1"
 
-    def test_remote_node_action_at_minimum_is_ok(self) -> None:
-        """A remote JavaScript action meeting the minimum yields no violation."""
-        g = make_github({"actions/new": {"action.yml": "runs:\n  using: node24\n  main: index.js\n"}})
-        checker = NodeVersionChecker(g, 24)
-
-        assert not checker.check_scanned_uses(scan("actions/new@v1"))
-
-    def test_docker_action_is_ignored(self) -> None:
-        """A docker:// reference is skipped without any API call."""
-        g = make_github({})
-        checker = NodeVersionChecker(g, 24)
-
-        assert not checker.check_scanned_uses(scan("docker://rhysd/actionlint:1.6.23"))
-        g.get_repo.assert_not_called()
-
-    def test_action_yaml_extension_fallback(self, tmp_path: Path) -> None:
-        """A local action defined in ``action.yaml`` (not ``.yml``) is still resolved."""
-        action_dir = tmp_path / ".github" / "actions" / "bar"
-        action_dir.mkdir(parents=True)
-        (action_dir / "action.yaml").write_text("runs:\n  using: node16\n  main: index.js\n")
-        checker = NodeVersionChecker(MagicMock(), 24, repo_root=tmp_path)
-
-        violations = checker.check_scanned_uses(scan("./.github/actions/bar"))
-
-        assert len(violations) == 1
-        assert violations[0].node_version == 16
-
-    def test_remote_composite_recurses_into_steps(self) -> None:
-        """A composite action's steps are resolved recursively."""
+    def test_composite_recurses_into_steps(self) -> None:
+        """A recommended composite action's steps are resolved recursively."""
         g = make_github(
             {
                 "my/comp": {"action.yml": "runs:\n  using: composite\n  steps:\n    - uses: actions/old@v1\n"},
@@ -137,67 +157,54 @@ class TestNodeVersionChecker:
             }
         )
         checker = NodeVersionChecker(g, 24)
+        action = make_action("my/comp", reference="v2", recommended_reference="sha", recommended_description="v2.1.0")
 
-        violations = checker.check_scanned_uses(scan("my/comp@v2"))
+        violations = checker.check_actions([action])
 
         assert len(violations) == 1
         assert violations[0].node_version == 16
-        assert violations[0].chain == ("my/comp@v2", "actions/old@v1")
-
-    def test_local_composite_recurses_into_remote_and_local_dependencies(self, tmp_path: Path) -> None:
-        """A local composite action pulling remote and local node actions reports both."""
-        foo_dir = tmp_path / ".github" / "actions" / "foo"
-        foo_dir.mkdir(parents=True)
-        (foo_dir / "action.yml").write_text(
-            "runs:\n"
-            "  using: composite\n"
-            "  steps:\n"
-            "    - uses: actions/old@v1\n"
-            "    - uses: ./.github/actions/bar\n"
-            "    - run: echo hello\n"
-        )
-        bar_dir = tmp_path / ".github" / "actions" / "bar"
-        bar_dir.mkdir(parents=True)
-        (bar_dir / "action.yml").write_text("runs:\n  using: node16\n  main: index.js\n")
-
-        g = make_github({"actions/old": {"action.yml": "runs:\n  using: node16\n"}})
-        checker = NodeVersionChecker(g, 24, repo_root=tmp_path)
-
-        violations = checker.check_scanned_uses(scan("./.github/actions/foo"))
-
-        versions = sorted(v.node_version for v in violations)
-        actions = {v.action for v in violations}
-        assert versions == [16, 16]
-        assert "actions/old@v1" in actions
+        assert violations[0].chain == ("my/comp@v2.1.0", "actions/old@v1")
 
     def test_missing_manifest_is_skipped(self) -> None:
         """When no manifest can be fetched, the action is skipped without error."""
         g = make_github({})
         checker = NodeVersionChecker(g, 24)
+        action = make_action("actions/missing", reference="v1", recommended_reference="sha")
 
-        assert not checker.check_scanned_uses(scan("actions/missing@v1"))
+        assert not checker.check_actions([action])
 
     def test_non_dict_manifest_is_skipped(self) -> None:
         """A manifest that does not parse into a mapping is ignored."""
         g = make_github({"weird/action": {"action.yml": "just a scalar string"}})
         checker = NodeVersionChecker(g, 24)
+        action = make_action("weird/action", reference="v1", recommended_reference="sha")
 
-        assert not checker.check_scanned_uses(scan("weird/action@v1"))
+        assert not checker.check_actions([action])
 
     def test_invalid_yaml_manifest_is_skipped(self) -> None:
         """A manifest with invalid YAML is ignored rather than raising."""
         g = make_github({"broken/action": {"action.yml": "runs: [unbalanced\n"}})
         checker = NodeVersionChecker(g, 24)
+        action = make_action("broken/action", reference="v1", recommended_reference="sha")
 
-        assert not checker.check_scanned_uses(scan("broken/action@v1"))
+        assert not checker.check_actions([action])
+
+    def test_bare_name_action_is_skipped(self) -> None:
+        """An action name that is not owner/repo cannot be resolved and is skipped."""
+        g = make_github({})
+        checker = NodeVersionChecker(g, 24)
+        action = make_action("justname", reference="v1")
+
+        assert not checker.check_actions([action])
+        g.get_repo.assert_not_called()
 
     def test_duplicate_references_are_deduplicated(self) -> None:
-        """The same offending action referenced twice yields a single violation."""
+        """The same offending action inspected twice yields a single violation."""
         g = make_github({"actions/old": {"action.yml": "runs:\n  using: node16\n"}})
         checker = NodeVersionChecker(g, 24)
-        results = {Path("wf.yml"): [{1: "uses: actions/old@v1"}, {2: "uses: actions/old@v1"}]}
+        action = make_action("actions/old", recommended_reference="sha", recommended_description="v1")
 
-        assert len(checker.check_scanned_uses(results)) == 1
+        assert len(checker.check_actions([action, action])) == 1
 
 
 def test_report_logs_error_per_violation(caplog: pytest.LogCaptureFixture) -> None:

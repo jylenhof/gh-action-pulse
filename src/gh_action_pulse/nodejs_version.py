@@ -1,10 +1,11 @@
-"""Recursively verify that GitHub Actions run on at least a minimum Node.js version.
+"""Verify that GitHub Actions run on at least a minimum Node.js version.
 
-The check resolves every ``uses:`` reference found while scanning the project and,
-for composite actions, walks their steps recursively. Both remote actions
-(``owner/repo[/path]@ref``, fetched through the GitHub API) and local actions
-(``./path``, read from the working tree) are followed so that a local composite
-action pulling in an outdated JavaScript action is also reported.
+For every unique action discovered in the project, the check resolves the
+manifest at the *recommended* reference (the reference the tool would update the
+action to) rather than the currently pinned one, and reports when its Node.js
+runtime is below the configured minimum. Composite actions are walked
+recursively so that a dependency pulling in an outdated JavaScript action is
+also reported.
 """
 
 from __future__ import annotations
@@ -24,13 +25,14 @@ if TYPE_CHECKING:
     from github import Github
     from github.Repository import Repository
 
+    from gh_action_pulse.actions import GithubAction
+
 logger = logging.getLogger(__name__)
 
-# Matches a scanned ``uses:`` line (already stripped) and captures the reference.
-_USES_RE = re.compile(r"^\s*-?\s*uses:\s*(?P<target>\S+)")
 # ``runs.using`` values such as ``node20`` / ``node24``.
 _NODE_USING_RE = re.compile(r"node(\d+)", re.IGNORECASE)
 _MANIFEST_FILENAMES = ("action.yml", "action.yaml")
+_MIN_OWNER_REPO_SEGMENTS = 2
 
 
 @dataclass(frozen=True)
@@ -62,7 +64,7 @@ class _Location:
 class NodeVersionChecker:  # pylint: disable=too-few-public-methods
     """Resolve actions recursively and collect Node.js version violations.
 
-    Exposes a single public entry point (``check_scanned_uses``) while keeping the
+    Exposes a single public entry point (``check_actions``) while keeping the
     recursion state (visited manifests, resolved violations, cached repositories)
     encapsulated in private helpers.
     """
@@ -76,15 +78,15 @@ class NodeVersionChecker:  # pylint: disable=too-few-public-methods
         self._visited: set[tuple[str | None, str | None, str]] = set()
         self._repos: dict[str, Repository] = {}
 
-    def check_scanned_uses(self, results: dict[Path, list[dict[int, str]]]) -> list[NodeVersionViolation]:
-        """Resolve every scanned ``uses:`` reference and return the collected violations."""
-        logger.info("Checking that actions run on at least Node.js %d...", self._minimum)
-        local = _Location()
-        for matches in results.values():
-            for match_dict in matches:
-                for line in match_dict.values():
-                    if target := self._extract_target(line):
-                        self._resolve(target, local, ())
+    def check_actions(self, actions: Iterable[GithubAction]) -> list[NodeVersionViolation]:
+        """Resolve each action at its recommended reference and return the violations found."""
+        logger.info("Checking that recommended actions run on at least Node.js %d...", self._minimum)
+        for action in actions:
+            target = self._recommended_target(action)
+            if target is None:
+                continue
+            location, action_dir, display = target
+            self._walk(location, action_dir, display, ())
         logger.info(
             "Finished Node.js version check. Found %d action(s) below the minimum.\n",
             len(self._violations),
@@ -92,12 +94,22 @@ class NodeVersionChecker:  # pylint: disable=too-few-public-methods
         return self._violations
 
     @staticmethod
-    def _extract_target(line: str) -> str | None:
-        """Extract the action reference from a scanned ``uses:`` line."""
-        if match := _USES_RE.match(line):
-            target = match.group("target").strip().strip("\"'")
-            return target or None
-        return None
+    def _recommended_target(action: GithubAction) -> tuple[_Location, str, str] | None:
+        """Build the manifest location for the reference the tool recommends for an action."""
+        full_name = action.recommended.repo_canonical_name or action.name
+        ref = action.recommended.reference or action.actual.reference
+        segments = full_name.split("/")
+        if len(segments) < _MIN_OWNER_REPO_SEGMENTS or not ref:
+            return None
+        repo_full_name = "/".join(segments[:_MIN_OWNER_REPO_SEGMENTS])
+        action_dir = "/".join(segments[_MIN_OWNER_REPO_SEGMENTS:])
+        label = (
+            action.recommended.description
+            or action.recommended.reference
+            or action.actual.description
+            or action.actual.reference
+        )
+        return _Location(repo_full_name=repo_full_name, ref=ref), action_dir, f"{full_name}@{label}"
 
     def _resolve(self, target: str, location: _Location, chain: tuple[str, ...]) -> None:
         """Resolve a single ``uses:`` reference, recursing into composite actions."""
@@ -105,21 +117,24 @@ class NodeVersionChecker:  # pylint: disable=too-few-public-methods
         if resolved is None:
             return
         child_location, action_dir, display = resolved
+        self._walk(child_location, action_dir, display, chain)
 
-        key = (child_location.repo_full_name, child_location.ref, action_dir)
+    def _walk(self, location: _Location, action_dir: str, display: str, chain: tuple[str, ...]) -> None:
+        """Load a resolved action manifest and process its ``runs`` block, recursing on composites."""
+        key = (location.repo_full_name, location.ref, action_dir)
         if key in self._visited:
             return
         self._visited.add(key)
 
         new_chain = (*chain, display)
-        manifest = self._load_manifest(child_location, action_dir)
+        manifest = self._load_manifest(location, action_dir)
         if manifest is None:
             logger.debug("Could not load action manifest for '%s'; skipping.", display)
             return
 
         runs = manifest.get("runs")
         if isinstance(runs, dict):
-            self._process_runs(runs, child_location, new_chain)
+            self._process_runs(runs, location, new_chain)
 
     def _process_runs(self, runs: dict, location: _Location, chain: tuple[str, ...]) -> None:
         """Inspect a manifest ``runs`` block, recording node violations or recursing on composites."""
@@ -167,12 +182,11 @@ class NodeVersionChecker:  # pylint: disable=too-few-public-methods
         if "@" in target:
             path_part, _, ref = target.partition("@")
             segments = path_part.split("/")
-            min_owner_repo_segments = 2
-            if len(segments) < min_owner_repo_segments:
+            if len(segments) < _MIN_OWNER_REPO_SEGMENTS:
                 logger.debug("Skipping unresolvable action reference '%s'.", target)
                 return None
-            repo_full_name = "/".join(segments[:min_owner_repo_segments])
-            action_dir = "/".join(segments[min_owner_repo_segments:])
+            repo_full_name = "/".join(segments[:_MIN_OWNER_REPO_SEGMENTS])
+            action_dir = "/".join(segments[_MIN_OWNER_REPO_SEGMENTS:])
             return _Location(repo_full_name=repo_full_name, ref=ref), action_dir, target
 
         logger.debug("Skipping unresolvable action reference '%s'.", target)

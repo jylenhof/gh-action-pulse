@@ -102,14 +102,14 @@ class LogLevel(StrEnum):
 
 def check_node_versions(
     g: Github,
-    results: dict[Path, list[dict[int, str]]],
+    uniq_github_actions: UniqGithubActions,
     minimum_nodejs_version: int,
 ) -> list[NodeVersionViolation]:
-    """Run the recursive Node.js version check and report any violations found."""
+    """Run the recursive Node.js version check on recommended references and report violations."""
     if minimum_nodejs_version <= 0:
         return []
     checker = NodeVersionChecker(g, minimum_nodejs_version)
-    violations = checker.check_scanned_uses(results)
+    violations = checker.check_actions(uniq_github_actions.get_actions())
     report_node_version_violations(violations, minimum_nodejs_version)
     return violations
 
@@ -257,7 +257,7 @@ def main(
     stale_actions = uniq_github_actions.get_stale_actions(max_age_in_days)
     warn_about_stale_actions(stale_actions, max_age_in_days)
 
-    node_version_violations = check_node_versions(g, results, minimum_nodejs_version)
+    node_version_violations = check_node_versions(g, uniq_github_actions, minimum_nodejs_version)
 
     apply_recommended_updates(results, uniq_github_actions, dry_run=dry_run)
 
