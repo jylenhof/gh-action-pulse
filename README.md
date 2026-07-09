@@ -133,11 +133,20 @@ gh-action-pulse --version
 - `--minimum-nodejs-version`: fail when an action, or any of its composite/local dependencies, runs on a Node.js major version below this value (default `24`). Use `0` to disable the check.
 - `--version`: print the package version and exit.
 
+## Exit Codes
+
+`gh-action-pulse` uses its exit code to signal the outcome of a run:
+
+- `0`: the run completed and no failing condition was detected.
+- `1`: a runtime failure (for example, GitHub authentication failed or a referenced action is archived) or a `--max-age` staleness failure occurred.
+- `3`: a Node.js runtime problem was detected in the repository. When an action, or any of its composite/local composite dependencies, runs on a Node.js major version below `--minimum-nodejs-version` (default `24`), the tool logs an error and exits with status `3`. Set `--minimum-nodejs-version 0` to disable this check.
+
+When both a Node.js version violation and another failing condition occur in the same run, the Node.js exit code (`3`) takes precedence.
+
 ## Limitations
 
 - Local actions such as `./.github/actions/my-action` are not part of the GitHub API lookup flow.
 - Recommendations depend on repositories exposing usable SemVer tags.
-- Archived action repositories cause the command to exit with an error.
 - The tool needs GitHub API access, so rate limits and authentication still apply.
 
 ## Roadmap
@@ -146,8 +155,14 @@ Possible future improvements:
 
 - Maybe Separate unit tests with appropriate workflow (pytest) if checks takes times
 - Add E2E tests with appropriate workflow (pytest and/or bats)
-- Maybe configuration file with some ignore parameters or specific rules for some workflows (needs thinking)
 - Change to versioned version of tools in mise.toml when near stable version (could depend on tools)
+
+Planned CLI options:
+
+- `--config-file`: load configuration, including ignore parameters or specific rules for some workflows (needs thinking).
+- `--only-workflow`: restrict scanning to a specific workflow.
+- `--workflow-omit`: exclude specific workflows from scanning.
+- `--github-action-omit`: exclude specific GitHub Actions from the checks.
 
 ## Contributing
 
