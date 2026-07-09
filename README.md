@@ -157,7 +157,7 @@ Possible future improvements:
 - Add E2E tests with appropriate workflow (pytest and/or bats)
 - Change to versioned version of tools in mise.toml when near stable version (could depend on tools)
 
-Planned CLI options:
+Potential future CLI options (to get the idea):
 
 - `--config-file`: load configuration, including ignore parameters or specific rules for some workflows (needs thinking).
 - `--only-workflow`: restrict scanning to a specific workflow.
