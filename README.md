@@ -138,10 +138,12 @@ gh-action-pulse --version
 `gh-action-pulse` uses its exit code to signal the outcome of a run:
 
 - `0`: the run completed and no failing condition was detected.
-- `1`: a runtime failure (for example, GitHub authentication failed or a referenced action is archived) or a `--max-age` staleness failure occurred.
+- `2`: GitHub authentication failed (`GITHUB_TOKEN` could not be resolved).
 - `3`: a Node.js runtime problem was detected in the repository. When an action, or any of its composite/local composite dependencies, runs on a Node.js major version below `--minimum-nodejs-version` (default `24`), the tool logs an error and exits with status `3`. Set `--minimum-nodejs-version 0` to disable this check.
+- `4`: a referenced upstream action repository is archived.
+- `5`: a `--max-age` staleness failure occurred.
 
-When both a Node.js version violation and another failing condition occur in the same run, the Node.js exit code (`3`) takes precedence.
+When multiple failing conditions are detected in the same run, the exit code with the lowest number is returned: authentication (`2`) and archived repositories (`4`) stop the run early, and among end-of-run checks the Node.js exit code (`3`) takes precedence over stale tags (`5`).
 
 ## Limitations
 

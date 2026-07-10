@@ -14,12 +14,15 @@ from gh_action_pulse import __version__
 from gh_action_pulse.actions import GithubAction, GithubActionArchivedError, UniqGithubActions
 from gh_action_pulse.full_list_of_existing_actions import FullListOfExistingActions
 from gh_action_pulse.helpers.constants import (
+    ARCHIVED_ACTION_ERROR_EXIT_CODE,
     DEFAULT_MAX_AGE,
     DEFAULT_MIN_AGE,
     DEFAULT_MINIMUM_NODEJS_VERSION,
+    GITHUB_TOKEN_ERROR_EXIT_CODE,
     MAX_MIN_AGE,
     NODEJS_VERSION_ERROR_EXIT_CODE,
     SEARCH_CONFIGS,
+    STALE_TAG_ERROR_EXIT_CODE,
 )
 from gh_action_pulse.helpers.github import get_github_token
 from gh_action_pulse.nodejs_version import (
@@ -237,7 +240,7 @@ def main(
         token = get_github_token()
     except RuntimeError as e:
         logger.exception("Failed to get GitHub token")
-        raise typer.Exit(code=1) from e
+        raise typer.Exit(code=GITHUB_TOKEN_ERROR_EXIT_CODE) from e
 
     g = Github(auth=Auth.Token(token))
 
@@ -252,7 +255,7 @@ def main(
     try:
         uniq_github_actions.get_fully_qualified(g, min_age_in_days)
     except GithubActionArchivedError:
-        raise typer.Exit(code=1) from None
+        raise typer.Exit(code=ARCHIVED_ACTION_ERROR_EXIT_CODE) from None
 
     stale_actions = uniq_github_actions.get_stale_actions(max_age_in_days)
     warn_about_stale_actions(stale_actions, max_age_in_days)
@@ -265,7 +268,7 @@ def main(
         raise typer.Exit(code=NODEJS_VERSION_ERROR_EXIT_CODE)
 
     if stale_actions:
-        raise typer.Exit(code=1)
+        raise typer.Exit(code=STALE_TAG_ERROR_EXIT_CODE)
 
 
 # Run the main function when the script is executed directly (useful for vscode debugger)
