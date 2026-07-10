@@ -149,6 +149,20 @@ When both a Node.js version violation and another failing condition occur in the
 - Recommendations depend on repositories exposing usable SemVer tags.
 - The tool needs GitHub API access, so rate limits and authentication still apply.
 
+### Node.js version check (`--minimum-nodejs-version`)
+
+The Node.js runtime check does not inspect every `uses:` line in the repository. In practice it:
+
+- only starts from remote GitHub Actions referenced as `owner/repo@ref` (or `owner/repo/path@ref`) in `.github/workflows` and `.github/actions`;
+- skips local actions such as `uses: ./.github/actions/my-action` because they do not match the `name@reference` pattern used during scanning;
+- inspects the **recommended** upstream reference (the one the tool would update to), not the currently pinned reference when a recommendation exists;
+- only flags JavaScript actions whose manifest declares `runs.using: nodeXX` (for example `node20`, `node24`);
+- skips Docker actions (`docker://`), unresolvable references, missing manifests, and other non-`nodeXX` runtimes;
+- walks composite actions recursively and checks nested `uses:` dependencies, including relative `./path` steps inside a **remote** composite action (resolved within that upstream repository);
+- does not meaningfully check reusable workflows referenced as `uses: org/repo/.github/workflows/foo.yml@ref`, because it looks for `action.yml`/`action.yaml` manifests rather than workflow files.
+
+Set `--minimum-nodejs-version 0` to disable this check entirely.
+
 ## Roadmap
 
 Possible future improvements:
