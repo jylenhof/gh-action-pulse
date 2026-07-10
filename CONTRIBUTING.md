@@ -160,4 +160,4 @@ A green PR generally means:
 3. Run `prek run --all-files --show-diff-on-failure`.
 4. Open a pull request with a short description of the behavior change.
 
-If you touch recommendation logic, also update [`rules.md`](rules.md). If you add CLI options, update [`README.md`](README.md) and note planned options in [`CLI.md`](CLI.md) when relevant.
+If you touch recommendation logic, also update [`rules.md`](rules.md). If you add CLI options, update [`README.md`](README.md).

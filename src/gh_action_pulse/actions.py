@@ -119,7 +119,7 @@ class GithubAction:
         )
         logger.info(
             "Completed actual and recommended metadata retrieval for action: '%s' with reference: '%s'"
-            "and description: '%s'\n",
+            " and description: '%s'\n",
             self.name,
             self.actual.reference,
             self.actual.description,
