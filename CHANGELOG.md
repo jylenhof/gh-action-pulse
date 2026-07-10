@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.0](https://github.com/jylenhof/gh-action-pulse/compare/v0.3.1...v0.4.0) (2026-07-10)
+
+
+### Features
+
+* add recursive minimum Node.js version check ([#48](https://github.com/jylenhof/gh-action-pulse/issues/48)) ([47bbcb1](https://github.com/jylenhof/gh-action-pulse/commit/47bbcb1e35b77aae800806f5945eeddb16ee8e62))
+
 ## [0.3.1](https://github.com/jylenhof/gh-action-pulse/compare/v0.3.0...v0.3.1) (2026-07-07)
 
 
