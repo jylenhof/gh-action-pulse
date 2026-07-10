@@ -17,6 +17,8 @@ DEFAULT_MAX_AGE = 150
 # are expected to run on. Set to 0 to disable the check.
 DEFAULT_MINIMUM_NODEJS_VERSION = 24
 
-# Dedicated exit code raised when at least one action runs on a Node.js version
-# older than the configured minimum. Kept distinct from the generic exit code 1.
+# Dedicated CLI exit codes for known failure conditions.
+GITHUB_TOKEN_ERROR_EXIT_CODE = 2
 NODEJS_VERSION_ERROR_EXIT_CODE = 3
+ARCHIVED_ACTION_ERROR_EXIT_CODE = 4
+STALE_TAG_ERROR_EXIT_CODE = 5
