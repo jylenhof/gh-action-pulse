@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.0](https://github.com/jylenhof/gh-action-pulse/compare/v0.4.0...v0.5.0) (2026-07-10)
+
+
+### Features
+
+* enhance exit code and fix main.py coverage ([#50](https://github.com/jylenhof/gh-action-pulse/issues/50)) ([89f37ce](https://github.com/jylenhof/gh-action-pulse/commit/89f37ce196941682c6ef3f6bb2e6e50310360806))
+
 ## [0.4.0](https://github.com/jylenhof/gh-action-pulse/compare/v0.3.1...v0.4.0) (2026-07-10)
 
 
