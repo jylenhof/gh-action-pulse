@@ -61,12 +61,14 @@ repos:
         entry: actionlint
         language: system
         files: '\.github/workflows/.*\.(yaml|yml)$'
-      - id: pinact
-        name: pinact
-        entry: "pinact run -u --min-age 7 --verify-comment"
-        language: system
-        files: '\.github/(workflows/.*|actions/.*/action)\.(yaml|yml)$'
-        pass_filenames: false
+
+      # pinact does not handle branch version
+      # - id: pinact
+      #  name: pinact
+      #  entry: "pinact run -u --min-age 7 --verify-comment" # verify-comment does not handle branch version
+      #  language: system
+      #  files: '\.github/(workflows/.*|actions/.*/action)\.(yaml|yml)$'
+      #  pass_filenames: false
       - id: ghalint
         name: ghalint
         entry: "ghalint run"

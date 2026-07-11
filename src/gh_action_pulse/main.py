@@ -11,7 +11,7 @@ import typer
 from github import Auth, Github
 
 from gh_action_pulse import __version__
-from gh_action_pulse.actions import GithubAction, GithubActionArchivedError, UniqGithubActions
+from gh_action_pulse.actions import GithubAction, GithubActionArchivedError
 from gh_action_pulse.full_list_of_existing_actions import FullListOfExistingActions
 from gh_action_pulse.helpers.constants import (
     ARCHIVED_ACTION_ERROR_EXIT_CODE,
@@ -30,6 +30,7 @@ from gh_action_pulse.nodejs_version import (
     NodeVersionViolation,
     report_node_version_violations,
 )
+from gh_action_pulse.uniq_actions import UniqGithubActions
 
 logger = logging.getLogger(__name__)
 app = typer.Typer()
