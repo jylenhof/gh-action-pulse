@@ -4,4 +4,8 @@ allow_merge_commits = false
 [branch]
 # https://conventional-branch.github.io/
 conventional_branch = true
-allow_branch_names = ["^release-please--branches--.*$", "^dependabot/.*$"]
+allow_branch_names = [
+  "^release-please--branches--.*$",
+  "^dependabot/.*$",
+  "^v[0-9]+\\.[0-9]+\\.[0-9]+$"
+]

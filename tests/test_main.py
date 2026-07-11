@@ -10,7 +10,7 @@ import pytest
 import typer
 from typer.testing import CliRunner
 
-from gh_action_pulse.actions import GithubAction, GithubActionArchivedError, UniqGithubActions
+from gh_action_pulse.actions import GithubAction, GithubActionArchivedError
 from gh_action_pulse.helpers.constants import (
     ARCHIVED_ACTION_ERROR_EXIT_CODE,
     GITHUB_TOKEN_ERROR_EXIT_CODE,
@@ -31,6 +31,7 @@ from gh_action_pulse.main import (
     warn_about_stale_actions,
 )
 from gh_action_pulse.nodejs_version import NodeVersionViolation
+from gh_action_pulse.uniq_actions import UniqGithubActions
 
 if TYPE_CHECKING:
     from collections.abc import Iterator

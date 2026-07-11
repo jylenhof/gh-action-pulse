@@ -9,7 +9,7 @@ SEARCH_CONFIGS: list[tuple[Path, str]] = [
     (Path(".github/actions"), "**/*.yaml"),
 ]
 
-DEFAULT_MIN_AGE = 20
+DEFAULT_MIN_AGE = 7
 MAX_MIN_AGE = 60
 DEFAULT_MAX_AGE = 150
 

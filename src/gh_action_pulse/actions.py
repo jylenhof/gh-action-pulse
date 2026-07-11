@@ -1,8 +1,7 @@
-"""Defines the GithubAction and UniqGithubActions classes to handle action identification and metadata retrieval."""
+"""Defines the GithubAction class to handle action identification and metadata retrieval."""
 
 import datetime
 import logging
-import re
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Literal
 
@@ -13,8 +12,6 @@ logger = logging.getLogger(__name__)
 
 
 if TYPE_CHECKING:
-    from pathlib import Path
-
     from github import Github
     from github.Repository import Repository
 
@@ -159,22 +156,28 @@ class GithubAction:
     def _set_actual_reference_type_and_date(self) -> None:
         """Determines the type and date of the actual reference."""
         try:
-            # actually get_commit look for both sha and tag
-            commit = self.repo.get_commit(sha=self.actual.reference)
-            self.actual.date = commit.commit.committer.date
-            if commit.commit.sha == self.actual.reference:
-                self.actual.reference_type = "sha"
-            else:
-                self.actual.reference_type = "tag"
+            ref = self.repo.get_git_ref(f"heads/{self.actual.reference}")
+            self.actual.reference_type = "branch"
+            self.actual.date = self.repo.get_commit(sha=ref.object.sha).commit.committer.date
         except GithubException:
             pass
         else:
             return
 
         try:
-            ref = self.repo.get_git_ref(f"heads/{self.actual.reference}")
-            self.actual.reference_type = "branch"
-            self.actual.date = self.repo.get_commit(sha=ref.object.sha).commit.committer.date
+            self.repo.get_git_ref(f"tags/{self.actual.reference}")
+            commit = self.repo.get_commit(sha=self.actual.reference)
+            self.actual.reference_type = "tag"
+            self.actual.date = commit.commit.committer.date
+        except GithubException:
+            pass
+        else:
+            return
+
+        try:
+            commit = self.repo.get_commit(sha=self.actual.reference)
+            self.actual.date = commit.commit.committer.date
+            self.actual.reference_type = "sha"
         except GithubException:
             pass
         else:
@@ -254,12 +257,20 @@ class GithubAction:
             case _:
                 if self._actual_sha_matches_tag():
                     self._set_recommended_reference_and_date_to_tag_if_exists(valid_semver_tags)
+                    return
 
-                if self.recommended.reference is None:
-                    self._set_recommended_to_latest_related_branch()
+                self._set_recommended_to_latest_related_branch()
 
     def _actual_sha_matches_tag(self) -> bool:
-        return any(tag.commit.commit.sha == self.actual.reference for tag in self.repo.get_tags())
+        if self.actual.reference_type != "sha":
+            return False
+
+        try:
+            resolved_sha = self.repo.get_commit(sha=self.actual.reference).commit.sha
+        except GithubException:
+            return False
+
+        return any(tag.commit.commit.sha == resolved_sha for tag in self.repo.get_tags())
 
     def _set_recommended_to_branch(self, branch_name: str) -> None:
         """Sets the recommendation to the latest commit of a specific branch."""
@@ -303,11 +314,11 @@ class GithubAction:
             )
 
     def _set_recommended_with_fallback(self, valid_tags: list, branch_name: str) -> None:
-        """Tries to recommend the latest tag, falling back to a branch if the tag is older than the current pin."""
+        """Recommend a tag when it is newer than the branch tip, otherwise keep the branch."""
         self._set_recommended_reference_and_date_to_tag_if_exists(valid_tags)
 
         should_use_branch = self.recommended.date is None or (
-            self.actual.date is not None and self.recommended.date < self.actual.date
+            self.actual.date is not None and self.recommended.date <= self.actual.date
         )
 
         if should_use_branch:
@@ -326,66 +337,3 @@ class GithubAction:
                 self.recommended.description = f"{tag.name}"
                 self.min_age_tag_date = tag_date
                 break
-
-
-class UniqGithubActions:
-    """A collection of unique GitHub Actions harvested from project files."""
-
-    def __init__(self) -> None:
-        """Initialize an empty set of GitHub Actions."""
-        self._actions: set[GithubAction] = set()
-
-    def init_from_full_list(self, full_list: dict[Path, list[dict[int, str]]]) -> None:
-        """Parse action references from a scanned list of file matches."""
-        action_pattern = re.compile(r"^\s*[-]?\s{0,1}uses:\s*([^@\s]+)@([^\s#]+)(?:\s+#\s+(.+))?")
-
-        logger.info("Parsing action references from scanned files with de-duplication...")
-        for matches in full_list.values():
-            for match_dict in matches:
-                for line in match_dict.values():
-                    if match := action_pattern.search(line):
-                        name: str = match.group(1)
-                        reference: str = match.group(2)
-                        actual_description: str | None = match.group(3) if match.group(3) is not None else None
-                        logger.info(  # Maybe move this to debug level
-                            "Found action \n=>name: %s \n=>reference: %s \n=>actual description: %s",
-                            name,
-                            reference,
-                            actual_description,
-                        )
-                        action = GithubAction(
-                            name=name,
-                            reference=reference,
-                            actual_description=actual_description,
-                        )
-                        self.add(action)
-        logger.info("Finished parsing action references. Total unique actions found: %d\n", len(self._actions))
-
-    def add(self, action: GithubAction) -> None:
-        """Add a unique GithubAction to the collection."""
-        self._actions.add(action)
-
-    def get_actions(self) -> set[GithubAction]:
-        """Return the set of collected GitHub Actions."""
-        return self._actions
-
-    def __getitem__(self, index: int) -> GithubAction:
-        """Allow indexing into the set of actions."""
-        return list(self._actions)[index]
-
-    def get_item(self, name: str, reference: str, description: str | None) -> GithubAction:
-        """Look for GithubAction which is named name with 'reference' reference and has 'description' description."""
-        for i in self._actions:
-            if i.name == name and i.actual.reference == reference and i.actual.description == description:
-                return i
-        raise GithubActionNotFoundError
-
-    def get_fully_qualified(self, g: Github, min_age: int) -> set[GithubAction]:
-        """Update all actions in the collection with metadata from the GitHub API."""
-        return {action.get_fully_qualified(g, min_age) for action in self.get_actions()}
-
-    def get_stale_actions(self, max_age: int) -> list[GithubAction]:
-        """Return actions whose min_age eligible tag is older than max_age."""
-        if max_age <= 0:
-            return []
-        return [action for action in self.get_actions() if not action.is_tag_fresh(max_age)]
