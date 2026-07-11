@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.1](https://github.com/jylenhof/gh-action-pulse/compare/v0.5.0...v0.5.1) (2026-07-11)
+
+
+### Bug Fixes
+
+* **rules:** respect rules ([#52](https://github.com/jylenhof/gh-action-pulse/issues/52)) ([4eff625](https://github.com/jylenhof/gh-action-pulse/commit/4eff625f27f4991ef5168a24f6cc30ccb9e9b99d))
+
 ## [0.5.0](https://github.com/jylenhof/gh-action-pulse/compare/v0.4.0...v0.5.0) (2026-07-10)
 
 
