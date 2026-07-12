@@ -90,7 +90,7 @@ repos:
       # python checks
       - id: uv-sync
         name: uv sync
-        entry: uv sync --locked --check --all-packages
+        entry: uv sync --locked --all-packages
         language: system
         files: '(pyproject\.toml|uv\.lock|\.python-version)$'
         pass_filenames: false
