@@ -1,0 +1,58 @@
+name: gh-action-pulse
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+    types: [opened, synchronize, reopened, ready_for_review]
+
+permissions:
+  contents: read
+
+jobs:
+  gh-action-pulse:
+    name: gh-action-pulse
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      UV_LINK_MODE: copy
+    permissions:
+      contents: read
+    steps:
+      - name: "Cleaning up"
+        uses: gacts/run-and-post-run@598d7a875d5620e0457490555b5e18e46082aa47 # v1.4.4
+        with:
+          run: |
+            echo "Pre-Check Cleanup"
+            echo "~/.local" | xargs rm -rf
+          post: |
+            echo "Post-Check Cleanup"
+            echo "~/.local" | xargs rm -rf
+
+      - name: Checkout repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Set up mise
+        uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0
+        env:
+          MISE_INSTALL_FROM_GITHUB: 1
+        with:
+          cache: false
+          version: ${{ vars.MISE_VERSION }}
+
+      - name: Verify gh-action-pulse is applied
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          uv run --frozen gh-action-pulse
+          if ! git diff --quiet; then
+            echo "::error::gh-action-pulse updates are not applied."
+            echo "Run 'uv run gh-action-pulse' locally and commit the changes."
+            git diff
+            exit 1
+          fi

@@ -62,10 +62,17 @@ repos:
         language: system
         files: '\.github/workflows/.*\.(yaml|yml)$'
 
-      # pinact does not handle branch version
+      #  pinact does not handle branch version
       # - id: pinact
       #  name: pinact
       #  entry: "pinact run -u --min-age 7 --verify-comment" # verify-comment does not handle branch version
+      #  language: system
+      #  files: '\.github/(workflows/.*|actions/.*/action)\.(yaml|yml)$'
+      #  pass_filenames: false
+      #  gh-action pulse is not fast enough to be used in prek
+      #- id: gh-action-pulse
+      #  name: gh-action-pulse
+      #  entry: "uv run --frozen gh-action-pulse --min-age 7"
       #  language: system
       #  files: '\.github/(workflows/.*|actions/.*/action)\.(yaml|yml)$'
       #  pass_filenames: false
@@ -81,6 +88,12 @@ repos:
         files: '(\.github/(workflows/.*|actions/.*/action|dependabot\.ya?ml))|(action\.ya?ml)$'
 
       # python checks
+      - id: uv-sync
+        name: uv sync
+        entry: uv sync --locked --all-packages
+        language: system
+        files: '(pyproject\.toml|uv\.lock|\.python-version)$'
+        pass_filenames: false
       - id: "ruff format"
         name: "ruff format"
         entry: "uv run --frozen ruff format"
