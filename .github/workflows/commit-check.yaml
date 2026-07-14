@@ -1,3 +1,4 @@
+---
 name: Commit Check
 
 on:
@@ -12,7 +13,7 @@ jobs:
   commit-check:
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    permissions:  # use permissions because use of pr-comments
+    permissions: # use permissions because use of pr-comments
       contents: read
       pull-requests: write
     steps:
@@ -28,7 +29,7 @@ jobs:
 
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
-          fetch-depth: 0  # Required for merge-base checks
+          fetch-depth: 0 # Required for merge-base checks
           persist-credentials: false
 
       - uses: commit-check/commit-check-action@0e0ac2f48ed0d43062a4ab46bf74127e27aab58f # v2.10.0
