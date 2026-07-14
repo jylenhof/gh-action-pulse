@@ -1,7 +1,7 @@
 #:schema https://mise.jdx.dev/schema/mise.json
 
 [tools]  # tombi: format.rules.table-keys-order = "ascending"
-# hooks to use on all my projects
+# tools to use on all my projects
 action-validator = "latest"
 actionlint = "latest"
 editorconfig-checker = "latest"
