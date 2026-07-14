@@ -17,7 +17,6 @@ repos:
       - id: check-merge-conflict
       - id: check-shebang-scripts-are-executable
       - id: check-symlinks
-      - id: check-symlinks
       - id: check-yaml
         args: [--allow-multiple-documents]
       - id: destroyed-symlinks
