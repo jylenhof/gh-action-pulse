@@ -13,17 +13,20 @@ repos:
       - id: check-author-email
   - repo: builtin
     hooks:
-      - id: trailing-whitespace
-      - id: end-of-file-fixer
-      - id: check-symlinks
-      - id: detect-private-key
-      - id: check-shebang-scripts-are-executable
       - id: check-executables-have-shebangs
+      - id: check-merge-conflict
+      - id: check-shebang-scripts-are-executable
+      - id: check-symlinks
       - id: check-yaml
         args: [--allow-multiple-documents]
-      - id: check-merge-conflict
+      - id: destroyed-symlinks
+      - id: detect-private-key
+      - id: end-of-file-fixer
+      - id: mixed-line-ending
+      - id: trailing-whitespace
   - repo: local
     hooks:
+      # hooks to use on all my projects
       - id: editorconfig-checker # editorconfig-checker config
         name: editorconfig-checker
         entry: ec
@@ -33,6 +36,16 @@ repos:
         entry: "rumdl check"
         language: system
         files: '\.md$'
+      - id: shellcheck # shell linter
+        name: "shellcheck"
+        entry: "shellcheck"
+        language: system
+        files: '\.(sh|bash)$'
+      - id: shfmt # shell formatter
+        name: "shfmt"
+        entry: "shfmt"
+        language: system
+        files: '\.(sh|bash)$'
       - id: tombi-format # toml formatter
         name: "tombi format"
         entry: "tombi format"
@@ -43,25 +56,28 @@ repos:
         entry: "tombi lint"
         language: system
         files: '\.toml$'
-      - id: shfmt # shell formatter
-        name: "shfmt"
-        entry: "shfmt"
+      - id: yamlfmt
+        name: yamlfmt
+        entry: "yamlfmt"
         language: system
-        files: '\.(sh|bash)$'
-      - id: shellcheck # shell linter
-        name: "shellcheck"
-        entry: "shellcheck"
+        files: '\.(yml|yaml)$'
+      - id: yamllint
+        name: yamllint
+        entry: "yamllint"
         language: system
-        files: '\.(sh|bash)$'
-
+        files: '\.(yml|yaml)$'
 
       # github actions and workflows
+      - id: action-validator
+        name: action-validator
+        entry: action-validator
+        language: system
+        files: '\.github/workflows/.*\.(yaml|yml)$'
       - id: actionlint
         name: actionlint
         entry: actionlint
         language: system
         files: '\.github/workflows/.*\.(yaml|yml)$'
-
       #  pinact does not handle branch version
       # - id: pinact
       #  name: pinact
