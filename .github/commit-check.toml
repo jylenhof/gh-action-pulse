@@ -1,5 +1,7 @@
 [commit]
 allow_merge_commits = false
+# Bypass checks for bot/automation authors and co-authors:
+ignore_authors = ["dependabot[bot]", "renovate[bot]", "copilot[bot]"]
 
 [branch]
 # https://conventional-branch.github.io/
