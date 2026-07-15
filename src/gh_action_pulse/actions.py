@@ -1,5 +1,7 @@
 """Defines the GithubAction class to handle action identification and metadata retrieval."""
 
+from __future__ import annotations
+
 import datetime
 import logging
 from dataclasses import dataclass
@@ -12,8 +14,11 @@ logger = logging.getLogger(__name__)
 
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
+
     from github import Github
     from github.Repository import Repository
+    from github.Tag import Tag
 
 
 @dataclass
@@ -239,7 +244,7 @@ class GithubAction:
                 logger.error("Unknown reference type encountered, that should not happen.")
                 raise SystemExit(1)
 
-    def _get_valid_semver_tags(self) -> list:
+    def _get_valid_semver_tags(self) -> list[Tag]:
         valid_semver_tags = []
         for tag in self.repo.get_tags():
             clean_name = tag.name.lstrip("v")
@@ -256,7 +261,7 @@ class GithubAction:
             return age.days <= max_age
         return bool(self.has_semver_tags)
 
-    def _set_recommended_for_sha(self, valid_semver_tags: list) -> None:
+    def _set_recommended_for_sha(self, valid_semver_tags: Sequence[Tag]) -> None:
         match self.actual.description_type:
             case "tag":
                 self._set_recommended_reference_and_date_to_tag_if_exists(valid_semver_tags)
@@ -324,7 +329,7 @@ class GithubAction:
                 self.name,
             )
 
-    def _set_recommended_with_fallback(self, valid_tags: list, branch_name: str) -> None:
+    def _set_recommended_with_fallback(self, valid_tags: Sequence[Tag], branch_name: str) -> None:
         """Recommend a tag when it is newer than the branch tip, otherwise keep the branch."""
         self._set_recommended_reference_and_date_to_tag_if_exists(valid_tags)
 
@@ -352,20 +357,20 @@ class GithubAction:
         return max(versions) if versions else None
 
     @staticmethod
-    def _parse_tag_version(tag) -> semver.Version:
+    def _parse_tag_version(tag: Tag) -> semver.Version:
         return semver.Version.parse(tag.name.lstrip("v"))
 
     @staticmethod
-    def _tag_meets_min_age(tag, cutoff: datetime.datetime) -> bool:
+    def _tag_meets_min_age(tag: Tag, cutoff: datetime.datetime) -> bool:
         return tag.commit.commit.committer.date <= cutoff
 
-    def _find_tag_for_version(self, valid_semver_tags: list, version: semver.Version):
+    def _find_tag_for_version(self, valid_semver_tags: Sequence[Tag], version: semver.Version) -> Tag | None:
         for tag in valid_semver_tags:
             if self._parse_tag_version(tag) == version:
                 return tag
         return None
 
-    def _apply_tag_recommendation(self, tag, cutoff: datetime.datetime) -> None:
+    def _apply_tag_recommendation(self, tag: Tag, cutoff: datetime.datetime) -> None:
         tag_date = tag.commit.commit.committer.date
         self.recommended.reference = tag.commit.sha
         self.recommended.date = tag_date
@@ -373,7 +378,7 @@ class GithubAction:
         if tag_date <= cutoff:
             self.min_age_tag_date = tag_date
 
-    def _set_recommended_reference_and_date_to_tag_if_exists(self, valid_semver_tags: list) -> None:
+    def _set_recommended_reference_and_date_to_tag_if_exists(self, valid_semver_tags: Sequence[Tag]) -> None:
         now = datetime.datetime.now(datetime.UTC)
         cutoff = now - datetime.timedelta(days=self.min_age)
         self.min_age_tag_date = None
