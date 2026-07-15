@@ -198,6 +198,27 @@ class TestApplyRecommendedUpdates:
 
         assert workflow.read_text(encoding="utf-8") == original
 
+    def test_skips_lines_when_recommended_matches_actual(
+        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """No change is logged or written when recommended reference already matches actual."""
+        workflow = tmp_path / "workflow.yml"
+        original = "- uses: actions/checkout@abc123 # v4.2.0\n"
+        workflow.write_text(original, encoding="utf-8")
+
+        action = GithubAction("actions/checkout", "abc123", "v4.2.0")
+        action.recommended.reference = "abc123"
+        action.recommended.description = "v4.2.0"
+        uniq = UniqGithubActions()
+        uniq.add(action)
+
+        with caplog.at_level(logging.INFO):
+            apply_recommended_updates({workflow: [{1: original.rstrip("\n")}]}, uniq, dry_run=False)
+
+        assert workflow.read_text(encoding="utf-8") == original
+        assert "Changing line number" not in caplog.text
+        assert "Writing these changes" not in caplog.text
+
     def test_ignores_lines_that_do_not_match_uses_pattern(self, tmp_path: Path) -> None:
         """Non-matching scanned lines are left untouched."""
         workflow = tmp_path / "workflow.yml"

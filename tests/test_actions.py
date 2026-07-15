@@ -142,6 +142,7 @@ class TestGithubAction:
                 "actions/checkout@def456 # v4.1.0",
             ),
             (None, "abc123", None, (None, None), None),
+            (None, "abc123", "v4.0.0", ("abc123", "v4.0.0"), None),
         ],
     )
     def test_get_updated_uses_replacement(
