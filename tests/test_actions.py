@@ -770,7 +770,7 @@ class TestGithubAction:
         action._set_recommended_reference_and_date_to_tag_if_exists([])
 
     def test__set_recommended_reference_and_date_to_tag_if_exists_with_newer_tag(self) -> None:
-        """Checks that tags newer than the min_age cutoff are not recommended."""
+        """Checks that tags newer than the min_age cutoff are not recommended when no version is pinned."""
         action = GithubAction("actions/checkout", "sha-for-main-old", "main")
         action.min_age = 30
         now = datetime.datetime.now(datetime.UTC)
@@ -788,6 +788,95 @@ class TestGithubAction:
         assert action.recommended.reference == "sha-for-v4"
         assert action.recommended.date == datetime.datetime(2026, 1, 3, tzinfo=datetime.UTC)
         assert action.recommended.description == "v4.0.0"
+
+    def test__set_recommended_reference_and_date_to_tag_if_exists_does_not_downgrade_tag_reference(self) -> None:
+        """Pinned tag references must not downgrade when only older tags meet min_age."""
+        action = GithubAction("actions/checkout", "v6.0.0")
+        action.actual.reference_type = "tag"
+        action.min_age = 30
+        now = datetime.datetime.now(datetime.UTC)
+        mock_tag_v6 = MagicMock()
+        mock_tag_v6.name = "v6.0.0"
+        mock_tag_v6.commit.sha = "sha-for-v6"
+        mock_tag_v6.commit.commit.committer.date = now - datetime.timedelta(days=29)
+        mock_tag_v4 = MagicMock()
+        mock_tag_v4.name = "v4.0.0"
+        mock_tag_v4.commit.sha = "sha-for-v4"
+        mock_tag_v4.commit.commit.committer.date = datetime.datetime(2026, 1, 3, tzinfo=datetime.UTC)
+
+        action._set_recommended_reference_and_date_to_tag_if_exists([mock_tag_v6, mock_tag_v4])
+
+        assert action.recommended.reference == "sha-for-v6"
+        assert action.recommended.description == "v6.0.0"
+        assert action.min_age_tag_date is None
+
+    def test__set_recommended_reference_and_date_to_tag_if_exists_does_not_downgrade_tag_comment(self) -> None:
+        """Pinned tag comments must not downgrade when only older tags meet min_age."""
+        action = GithubAction("actions/checkout", "abc123", "v6.0.0")
+        action.actual.reference_type = "sha"
+        action.actual.description_type = "tag"
+        action.min_age = 30
+        now = datetime.datetime.now(datetime.UTC)
+        mock_tag_v6 = MagicMock()
+        mock_tag_v6.name = "v6.0.0"
+        mock_tag_v6.commit.sha = "sha-for-v6"
+        mock_tag_v6.commit.commit.committer.date = now - datetime.timedelta(days=29)
+        mock_tag_v4 = MagicMock()
+        mock_tag_v4.name = "v4.0.0"
+        mock_tag_v4.commit.sha = "sha-for-v4"
+        mock_tag_v4.commit.commit.committer.date = datetime.datetime(2026, 1, 3, tzinfo=datetime.UTC)
+
+        action._set_recommended_reference_and_date_to_tag_if_exists([mock_tag_v6, mock_tag_v4])
+
+        assert action.recommended.reference == "sha-for-v6"
+        assert action.recommended.description == "v6.0.0"
+        assert action.min_age_tag_date is None
+
+    def test__set_recommended_reference_and_date_to_tag_if_exists_keeps_pinned_too_new_tag(self) -> None:
+        """When pinned to a too-new tag, keep it instead of downgrading or upgrading to another too-new tag."""
+        action = GithubAction("actions/checkout", "v6.0.0")
+        action.actual.reference_type = "tag"
+        action.min_age = 30
+        now = datetime.datetime.now(datetime.UTC)
+        mock_tag_v7 = MagicMock()
+        mock_tag_v7.name = "v7.0.0"
+        mock_tag_v7.commit.sha = "sha-for-v7"
+        mock_tag_v7.commit.commit.committer.date = now - datetime.timedelta(days=5)
+        mock_tag_v6 = MagicMock()
+        mock_tag_v6.name = "v6.0.0"
+        mock_tag_v6.commit.sha = "sha-for-v6"
+        mock_tag_v6.commit.commit.committer.date = now - datetime.timedelta(days=29)
+        mock_tag_v4 = MagicMock()
+        mock_tag_v4.name = "v4.0.0"
+        mock_tag_v4.commit.sha = "sha-for-v4"
+        mock_tag_v4.commit.commit.committer.date = datetime.datetime(2026, 1, 3, tzinfo=datetime.UTC)
+
+        action._set_recommended_reference_and_date_to_tag_if_exists([mock_tag_v7, mock_tag_v6, mock_tag_v4])
+
+        assert action.recommended.reference == "sha-for-v6"
+        assert action.recommended.description == "v6.0.0"
+        assert action.min_age_tag_date is None
+
+    def test__set_recommended_reference_and_date_to_tag_if_exists_upgrades_when_min_age_met(self) -> None:
+        """Min-age eligible upgrades above the pinned version should still be recommended."""
+        action = GithubAction("actions/checkout", "v4.0.0")
+        action.actual.reference_type = "tag"
+        action.min_age = 30
+        now = datetime.datetime.now(datetime.UTC)
+        mock_tag_v6 = MagicMock()
+        mock_tag_v6.name = "v6.0.0"
+        mock_tag_v6.commit.sha = "sha-for-v6"
+        mock_tag_v6.commit.commit.committer.date = now - datetime.timedelta(days=60)
+        mock_tag_v4 = MagicMock()
+        mock_tag_v4.name = "v4.0.0"
+        mock_tag_v4.commit.sha = "sha-for-v4"
+        mock_tag_v4.commit.commit.committer.date = datetime.datetime(2026, 1, 3, tzinfo=datetime.UTC)
+
+        action._set_recommended_reference_and_date_to_tag_if_exists([mock_tag_v6, mock_tag_v4])
+
+        assert action.recommended.reference == "sha-for-v6"
+        assert action.recommended.description == "v6.0.0"
+        assert action.min_age_tag_date == mock_tag_v6.commit.commit.committer.date
 
     def test__get_valid_semver_tags_sets_has_semver_tags(self) -> None:
         """Verify that _get_valid_semver_tags records whether semver tags exist."""

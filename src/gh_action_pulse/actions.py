@@ -335,16 +335,69 @@ class GithubAction:
         if should_use_branch:
             self._set_recommended_to_branch(branch_name)
 
+    def _get_actual_semver_version(self) -> semver.Version | None:
+        """Return the highest semver version from the pinned tag reference or comment."""
+        version_strings: list[str] = []
+        if self.actual.reference_type == "tag":
+            version_strings.append(self.actual.reference)
+        if self.actual.description_type == "tag" and self.actual.description:
+            version_strings.append(self.actual.description)
+
+        versions = [
+            semver.Version.parse(clean)
+            for value in version_strings
+            for clean in [value.lstrip("v")]
+            if semver.Version.is_valid(clean)
+        ]
+        return max(versions) if versions else None
+
+    @staticmethod
+    def _parse_tag_version(tag) -> semver.Version:
+        return semver.Version.parse(tag.name.lstrip("v"))
+
+    @staticmethod
+    def _tag_meets_min_age(tag, cutoff: datetime.datetime) -> bool:
+        return tag.commit.commit.committer.date <= cutoff
+
+    def _find_tag_for_version(self, valid_semver_tags: list, version: semver.Version):
+        for tag in valid_semver_tags:
+            if self._parse_tag_version(tag) == version:
+                return tag
+        return None
+
+    def _apply_tag_recommendation(self, tag, cutoff: datetime.datetime) -> None:
+        tag_date = tag.commit.commit.committer.date
+        self.recommended.reference = tag.commit.sha
+        self.recommended.date = tag_date
+        self.recommended.description = f"{tag.name}"
+        if tag_date <= cutoff:
+            self.min_age_tag_date = tag_date
+
     def _set_recommended_reference_and_date_to_tag_if_exists(self, valid_semver_tags: list) -> None:
         now = datetime.datetime.now(datetime.UTC)
         cutoff = now - datetime.timedelta(days=self.min_age)
         self.min_age_tag_date = None
+        current_version = self._get_actual_semver_version()
 
+        min_age_eligible_tag = None
         for tag in valid_semver_tags:
             tag_date = tag.commit.commit.committer.date
             if tag_date <= cutoff:
-                self.recommended.reference = tag.commit.sha
-                self.recommended.date = tag_date
-                self.recommended.description = f"{tag.name}"
-                self.min_age_tag_date = tag_date
+                min_age_eligible_tag = tag
                 break
+
+        selected_tag = None
+        if min_age_eligible_tag is not None and (
+            current_version is None or self._parse_tag_version(min_age_eligible_tag) >= current_version
+        ):
+            selected_tag = min_age_eligible_tag
+
+        if selected_tag is None and current_version is not None:
+            actual_tag = self._find_tag_for_version(valid_semver_tags, current_version)
+            if actual_tag is not None and not self._tag_meets_min_age(actual_tag, cutoff):
+                selected_tag = actual_tag
+        elif selected_tag is None:
+            selected_tag = min_age_eligible_tag
+
+        if selected_tag is not None:
+            self._apply_tag_recommendation(selected_tag, cutoff)
