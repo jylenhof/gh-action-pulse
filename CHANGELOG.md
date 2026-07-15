@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.0.0](https://github.com/jylenhof/gh-action-pulse/compare/v0.5.2...v1.0.0) (2026-07-15)
+
+
+### ⚠ BREAKING CHANGES
+
+* **logic:** Never downgrade action version ([#66](https://github.com/jylenhof/gh-action-pulse/issues/66))
+
+### Bug Fixes
+
+* **logic:** Never downgrade action version ([#66](https://github.com/jylenhof/gh-action-pulse/issues/66)) ([a930c38](https://github.com/jylenhof/gh-action-pulse/commit/a930c389e001a88f745a3fabcecbb75f2fbefea4))
+
 ## [0.5.2](https://github.com/jylenhof/gh-action-pulse/compare/v0.5.1...v0.5.2) (2026-07-15)
 
 
