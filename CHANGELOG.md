@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.2](https://github.com/jylenhof/gh-action-pulse/compare/v0.5.1...v0.5.2) (2026-07-15)
+
+
+### Bug Fixes
+
+* **display:** skip no-op action updates when recommended matches actual ([#63](https://github.com/jylenhof/gh-action-pulse/issues/63)) ([ea848ab](https://github.com/jylenhof/gh-action-pulse/commit/ea848ab87796a04f403008739850787d9ded4711))
+
 ## [0.5.1](https://github.com/jylenhof/gh-action-pulse/compare/v0.5.0...v0.5.1) (2026-07-11)
 
 
