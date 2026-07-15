@@ -135,6 +135,11 @@ class GithubAction:
         self.recommended.repo_canonical_name = f"{canonical_repo}/{subpath}" if subpath else canonical_repo
         logger.info("Action '%s' redirects to '%s'", self.name, self.recommended.repo_canonical_name)
 
+    def _build_uses_content(self, action_name: str, reference: str, description: str | None) -> str:
+        if description:
+            return f"{action_name}@{reference} # {description}"
+        return f"{action_name}@{reference}"
+
     def get_updated_uses_replacement(
         self,
         actual_reference: str,
@@ -144,14 +149,20 @@ class GithubAction:
         action_name = self.recommended.repo_canonical_name or self.name
 
         if self.recommended.reference and self.recommended.description:
-            return f"{action_name}@{self.recommended.reference} # {self.recommended.description}"
+            replacement = self._build_uses_content(
+                action_name,
+                self.recommended.reference,
+                self.recommended.description,
+            )
+        elif self.recommended.repo_canonical_name is not None:
+            replacement = self._build_uses_content(action_name, actual_reference, actual_description)
+        else:
+            return None
 
-        if self.recommended.repo_canonical_name is not None:
-            if actual_description:
-                return f"{action_name}@{actual_reference} # {actual_description}"
-            return f"{action_name}@{actual_reference}"
-
-        return None
+        current = self._build_uses_content(self.name, actual_reference, actual_description)
+        if replacement == current:
+            return None
+        return replacement
 
     def _set_actual_reference_type_and_date(self) -> None:
         """Determines the type and date of the actual reference."""

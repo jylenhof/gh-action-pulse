@@ -131,29 +131,32 @@ def apply_recommended_updates(
         with Path.open(file) as f:
             file_lines = f.readlines()  # start with index 0
         logger.info("File read to update github actions: %s\n", file)
+        file_changed = False
         for action_with_line in actions_list:
             for line_number, full_line in action_with_line.items():
-                logger.info("Changing line number: %s", line_number)
                 if match := action_pattern.search(full_line):
                     name: str = match.group(1)
                     actual_reference: str = match.group(2)
                     actual_description: str | None = match.group(3) if match.group(3) is not None else None
                     uniq_action = uniq_github_actions.get_item(name, actual_reference, actual_description)
-                    logger.info("from:\n%s", file_lines[line_number - 1])
                     if replacement := uniq_action.get_updated_uses_replacement(actual_reference, actual_description):
+                        logger.info("Changing line number: %s", line_number)
+                        logger.info("from:\n%s", file_lines[line_number - 1])
                         file_lines[line_number - 1] = re.sub(
                             pattern=r"^(\s*[-]?\s{0,1}uses:\s*)(?:[^@\s]+)@[^\s#]+(?:\s+#\s+.+)?",
                             repl=r"\1" + replacement,
                             string=file_lines[line_number - 1],
                         )
                         logger.info("to:\n%s", file_lines[line_number - 1])
-        if dry_run:
-            logger.info("Dry Run Mode! So Would have normally update github actions in: %s", file)
-        else:
-            logger.info("Writing these changes to update github actions in: %s", file)
-            with Path.open(file, mode="wt") as f:
-                f.writelines(file_lines)
-            logger.info("End of writing file to update github actions: %s\n", file)
+                        file_changed = True
+        if file_changed:
+            if dry_run:
+                logger.info("Dry Run Mode! So Would have normally update github actions in: %s", file)
+            else:
+                logger.info("Writing these changes to update github actions in: %s", file)
+                with Path.open(file, mode="wt") as f:
+                    f.writelines(file_lines)
+                logger.info("End of writing file to update github actions: %s\n", file)
 
 
 def warn_about_stale_actions(stale_actions: list[GithubAction], max_age: int) -> None:
