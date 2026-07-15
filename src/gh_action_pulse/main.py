@@ -127,10 +127,10 @@ def apply_recommended_updates(
     """Rewrite scanned files with recommended action references (unless in dry-run mode)."""
     action_pattern: re.Pattern[str] = re.compile(r"^\s*[-]?\s{0,1}uses:\s*([^@\s]+)@([^\s#]+)(?:\s+#\s+(.+))?")
     for file, actions_list in results.items():
-        logger.info("Reading all file to update github actions: %s", file)
+        logger.info("Reading %s file to update github actions", file)
         with Path.open(file) as f:
             file_lines = f.readlines()  # start with index 0
-        logger.info("File read to update github actions: %s\n", file)
+        logger.info("%s file read to update github actions\n", file)
         file_changed = False
         for action_with_line in actions_list:
             for line_number, full_line in action_with_line.items():
@@ -151,12 +151,12 @@ def apply_recommended_updates(
                         file_changed = True
         if file_changed:
             if dry_run:
-                logger.info("Dry Run Mode! So Would have normally update github actions in: %s", file)
+                logger.info("Dry Run Mode! So Would have normally update github actions in %s file", file)
             else:
-                logger.info("Writing these changes to update github actions in: %s", file)
+                logger.info("Writing these changes to update github actions in %s file", file)
                 with Path.open(file, mode="wt") as f:
                     f.writelines(file_lines)
-                logger.info("End of writing file to update github actions: %s\n", file)
+                logger.info("End of writing %s file to update github actions\n", file)
 
 
 def warn_about_stale_actions(stale_actions: list[GithubAction], max_age: int) -> None:
