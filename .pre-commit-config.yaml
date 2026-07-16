@@ -5,7 +5,7 @@ default_install_hook_types:
   - commit-msg
 repos:
   - repo: https://github.com/commit-check/commit-check
-    rev: v2.11.0
+    rev: v2.11.1
     hooks:
       - id: check-message
       - id: check-branch
