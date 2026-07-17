@@ -43,7 +43,7 @@ jobs:
         uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0
 
       - name: Upgrade local mise tools
-        uses: jylenhof/mise-update-tool@4e0cfce6308fd87c30fc0b6da75032d034292bac # v1.0.1
+        uses: jylenhof/mise-update-tool@db8cee1799284988f5343aa0e508d64b1e06be5e # fix/sanitize-release-note-mentions
         with:
           token: ${{ steps.generate-token.outputs.token }}
           tools: ${{ inputs.tools }}
