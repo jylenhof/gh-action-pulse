@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.1](https://github.com/jylenhof/gh-action-pulse/compare/v1.0.0...v1.0.1) (2026-07-20)
+
+
+### Bug Fixes
+
+* update mise-update-tool version containing github mentions sanitize ([76443f9](https://github.com/jylenhof/gh-action-pulse/commit/76443f98b2c812e08dc256863ec00c3262d91378))
+
 ## [1.0.0](https://github.com/jylenhof/gh-action-pulse/compare/v0.5.2...v1.0.0) (2026-07-15)
 
 
