@@ -9,7 +9,7 @@ dependencies = [
   "pygithub>=2.9.0,<3.0.0",
   "pyyaml>=6.0.2,<7.0.0",
   "semver>=3.0.4,<4.0.0",
-  "typer>=0.26.0,<0.27.0",
+  "typer>=0.26.0,<0.28.0",
 ]
 dynamic = [
   "version",
