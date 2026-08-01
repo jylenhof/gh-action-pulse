@@ -137,12 +137,14 @@ Routine per-file and per-action chatter is logged at `DEBUG`. Use `--log-level D
 
 ## CLI Options
 
-- `--dry-run`: show the updates without writing files.
-- `--log-level`: set the logging level (`DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL`).
-- `--min-age`: require tags to be at least this many days old before recommending them.
-- `--max-age`: fail when the chosen `--min-age`-eligible upstream tag is older than this many days. Use `0` to disable the check.
-- `--minimum-nodejs-version`: fail when an action, or any of its composite/local dependencies, runs on a Node.js major version below this value (default `24`). Use `0` to disable the check.
+- `--dry-run` (`GH_ACTION_PULSE_DRY_RUN`): show the updates without writing files.
+- `--log-level` (`GH_ACTION_PULSE_LOG_LEVEL`): set the logging level (`DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL`).
+- `--min-age` (`GH_ACTION_PULSE_MIN_AGE`): require tags to be at least this many days old before recommending them.
+- `--max-age` (`GH_ACTION_PULSE_MAX_AGE`): fail when the chosen `--min-age`-eligible upstream tag is older than this many days. Use `0` to disable the check.
+- `--minimum-nodejs-version` (`GH_ACTION_PULSE_MINIMUM_NODEJS_VERSION`): fail when an action, or any of its composite/local dependencies, runs on a Node.js major version below this value (default `24`). Use `0` to disable the check.
 - `--version`: print the package version and exit.
+
+CLI flags override the matching environment variables when both are set.
 
 ## Exit Codes
 

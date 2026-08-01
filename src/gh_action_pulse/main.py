@@ -350,6 +350,7 @@ def main(
             "--dry-run",
             help="Dry run mode",
             show_default=True,
+            envvar="GH_ACTION_PULSE_DRY_RUN",
         ),
     ] = False,
     log_level: Annotated[
@@ -358,6 +359,7 @@ def main(
             "--log-level",
             help="Set the logging level (e.g., DEBUG, INFO, WARNING, ERROR, CRITICAL)",
             show_default=True,
+            envvar="GH_ACTION_PULSE_LOG_LEVEL",
         ),
     ] = LogLevel.INFO,
     min_age_in_days: Annotated[
@@ -367,6 +369,7 @@ def main(
             help=f"Minimum age of actions to consider (in days, max {MAX_MIN_AGE})",
             show_default=True,
             callback=validate_min_age_cli,
+            envvar="GH_ACTION_PULSE_MIN_AGE",
         ),
     ] = DEFAULT_MIN_AGE,
     max_age_in_days: Annotated[
@@ -376,6 +379,7 @@ def main(
             help="Fail when the min-age eligible upstream tag is older than this many days (0 disables the check)",
             show_default=True,
             callback=validate_max_age_cli,
+            envvar="GH_ACTION_PULSE_MAX_AGE",
         ),
     ] = DEFAULT_MAX_AGE,
     minimum_nodejs_version: Annotated[
@@ -388,6 +392,7 @@ def main(
             ),
             show_default=True,
             callback=validate_minimum_nodejs_version_cli,
+            envvar="GH_ACTION_PULSE_MINIMUM_NODEJS_VERSION",
         ),
     ] = DEFAULT_MINIMUM_NODEJS_VERSION,
 ) -> None:

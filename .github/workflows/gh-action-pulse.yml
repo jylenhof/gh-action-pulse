@@ -49,6 +49,7 @@ jobs:
       - name: Verify gh-action-pulse is applied
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_ACTION_PULSE_LOG_LEVEL: ${{ runner.debug == '1' && 'DEBUG' || 'INFO' }}
         run: |-
           uv run --frozen gh-action-pulse
           if ! git diff --quiet; then

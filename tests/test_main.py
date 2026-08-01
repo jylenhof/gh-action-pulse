@@ -335,6 +335,33 @@ class TestMainCommand:
         assert result.exit_code == 0
         mock_apply.assert_called_once()
 
+    def test_help_lists_option_environment_variables(self) -> None:
+        """Typer help text documents the env vars wired to each configurable option."""
+        result = runner.invoke(app, ["--help"])
+
+        assert result.exit_code == 0
+        # Rich help truncates long env var names; assert on the shared prefix.
+        assert result.output.count("GH_ACTION_PULSE_") >= 5
+        assert result.output.count("[env var:") >= 5
+
+    def test_options_can_be_set_from_environment_variables(self) -> None:
+        """Configured env vars are accepted when the matching CLI flags are omitted."""
+        with self._patched_main() as (_uniq, mock_apply):
+            result = runner.invoke(
+                app,
+                [],
+                env={
+                    "GH_ACTION_PULSE_DRY_RUN": "1",
+                    "GH_ACTION_PULSE_LOG_LEVEL": "WARNING",
+                    "GH_ACTION_PULSE_MIN_AGE": "7",
+                    "GH_ACTION_PULSE_MAX_AGE": "0",
+                    "GH_ACTION_PULSE_MINIMUM_NODEJS_VERSION": "0",
+                },
+            )
+
+        assert result.exit_code == 0
+        mock_apply.assert_called_once_with({}, _uniq, dry_run=True)
+
     @patch("gh_action_pulse.main.get_github_token")
     def test_missing_token_exits_with_dedicated_code(self, mock_get_token: MagicMock) -> None:
         """Token resolution failures exit with the dedicated authentication status code."""
