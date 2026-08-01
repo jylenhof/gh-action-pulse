@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING
 from rich.progress import BarColumn, Progress, SpinnerColumn, TaskProgressColumn, TimeElapsedColumn
 
 from gh_action_pulse.actions import GithubAction, GithubActionNotFoundError
-from gh_action_pulse.console import console, phase_status
+from gh_action_pulse.helpers.console import console, phase_status
 
 logger = logging.getLogger(__name__)
 

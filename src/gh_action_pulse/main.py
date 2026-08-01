@@ -17,8 +17,8 @@ from rich.table import Table
 
 from gh_action_pulse import __version__
 from gh_action_pulse.actions import GithubAction, GithubActionArchivedError
-from gh_action_pulse.console import console, error, phase_status
 from gh_action_pulse.full_list_of_existing_actions import FullListOfExistingActions
+from gh_action_pulse.helpers.console import console, error, phase_status
 from gh_action_pulse.helpers.constants import (
     ARCHIVED_ACTION_ERROR_EXIT_CODE,
     DEFAULT_MAX_AGE,

@@ -21,7 +21,7 @@ from github.GithubException import GithubException
 from rich.progress import BarColumn, Progress, SpinnerColumn, TaskProgressColumn, TimeElapsedColumn
 from rich.table import Table
 
-from gh_action_pulse.console import console, phase_status
+from gh_action_pulse.helpers.console import console, phase_status
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
