@@ -93,7 +93,7 @@ class GithubAction:
 
     def get_fully_qualified(self, g: Github, min_age: int) -> GithubAction:
         """Fetch metadata from GitHub API to determine the type and dates of references."""
-        logger.info(
+        logger.debug(
             "Looking for actual and recommended metadata for action: '%s' with reference: '%s' and description: '%s'",
             self.name,
             self.actual.reference,
@@ -109,17 +109,17 @@ class GithubAction:
             raise GithubActionArchivedError(repo_name)
         self.min_age = min_age
         self._set_actual_reference_type_and_date()
-        logger.info("actual reference type is %s at date %s", self.actual.reference_type, self.actual.date)
+        logger.debug("actual reference type is %s at date %s", self.actual.reference_type, self.actual.date)
         self._set_actual_description_type()
-        logger.info("actual description type is %s", self.actual.description_type)
+        logger.debug("actual description type is %s", self.actual.description_type)
         self._set_recommended_reference_and_date()
-        logger.info(
+        logger.debug(
             "recommendation is ref: %s at date: %s with description: %s",
             self.recommended.reference,
             self.recommended.date,
             self.recommended.description,
         )
-        logger.info(
+        logger.debug(
             "Completed actual and recommended metadata retrieval for action: '%s' with reference: '%s'"
             " and description: '%s'\n",
             self.name,
@@ -138,7 +138,7 @@ class GithubAction:
         name_parts = self.name.split("/")
         subpath = "/".join(name_parts[2:])
         self.recommended.repo_canonical_name = f"{canonical_repo}/{subpath}" if subpath else canonical_repo
-        logger.info("Action '%s' redirects to '%s'", self.name, self.recommended.repo_canonical_name)
+        logger.debug("Action '%s' redirects to '%s'", self.name, self.recommended.repo_canonical_name)
 
     def _build_uses_content(self, action_name: str, reference: str, description: str | None) -> str:
         if description:

@@ -240,6 +240,7 @@ source = { editable = "." }
 dependencies = [
     { name = "pygithub" },
     { name = "pyyaml" },
+    { name = "rich" },
     { name = "semver" },
     { name = "typer" },
 ]
@@ -265,6 +266,7 @@ dev = [
 requires-dist = [
     { name = "pygithub", specifier = ">=2.9.0,<3.0.0" },
     { name = "pyyaml", specifier = ">=6.0.2,<7.0.0" },
+    { name = "rich", specifier = ">=14.0.0,<16.0.0" },
     { name = "semver", specifier = ">=3.0.4,<4.0.0" },
     { name = "typer", specifier = ">=0.26.0,<0.28.0" },
 ]

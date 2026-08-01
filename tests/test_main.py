@@ -19,6 +19,7 @@ from gh_action_pulse.helpers.constants import (
     STALE_TAG_ERROR_EXIT_CODE,
 )
 from gh_action_pulse.main import (
+    UpdateResult,
     app,
     apply_recommended_updates,
     check_node_versions,
@@ -145,7 +146,9 @@ class TestCheckNodeVersions:
         assert result == [violation]
         mock_checker_cls.assert_called_once()
         mock_checker.check_actions.assert_called_once_with(actions)
-        mock_report.assert_called_once_with([violation], 24)
+        mock_report.assert_called_once()
+        assert mock_report.call_args.args == ([violation], 24)
+        assert "elapsed" in mock_report.call_args.kwargs
 
 
 class TestApplyRecommendedUpdates:
@@ -212,12 +215,37 @@ class TestApplyRecommendedUpdates:
         uniq = UniqGithubActions()
         uniq.add(action)
 
-        with caplog.at_level(logging.INFO):
-            apply_recommended_updates({workflow: [{1: original.rstrip("\n")}]}, uniq, dry_run=False)
+        with caplog.at_level(logging.DEBUG):
+            result = apply_recommended_updates({workflow: [{1: original.rstrip("\n")}]}, uniq, dry_run=False)
 
         assert workflow.read_text(encoding="utf-8") == original
+        assert result.files_changed == 0
+        assert not result.replacements
         assert "Changing line number" not in caplog.text
         assert "Writing these changes" not in caplog.text
+
+    def test_returns_replacements_for_summary(self, tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
+        """Rewrites are returned for the summary and logged at DEBUG with from/to detail."""
+        workflow = tmp_path / "workflow.yml"
+        original = "- uses: actions/checkout@v4\n"
+        workflow.write_text(original, encoding="utf-8")
+
+        action = GithubAction("actions/checkout", "v4")
+        action.recommended.reference = "abc123"
+        action.recommended.description = "v4.2.0"
+        uniq = UniqGithubActions()
+        uniq.add(action)
+
+        with caplog.at_level(logging.DEBUG):
+            result = apply_recommended_updates({workflow: [{1: original.rstrip("\n")}]}, uniq, dry_run=True)
+
+        assert result.files_changed == 1
+        assert len(result.replacements) == 1
+        assert result.replacements[0].line_number == 1
+        assert "Changing line number" in caplog.text
+        assert "from:" in caplog.text
+        assert "to:" in caplog.text
+        assert workflow.read_text(encoding="utf-8") == original
 
     def test_ignores_lines_that_do_not_match_uses_pattern(self, tmp_path: Path) -> None:
         """Non-matching scanned lines are left untouched."""
@@ -286,7 +314,7 @@ class TestMainCommand:
                 "gh_action_pulse.main.check_node_versions",
                 return_value=[] if node_version_violations is None else node_version_violations,
             ),
-            patch("gh_action_pulse.main.apply_recommended_updates") as mock_apply,
+            patch("gh_action_pulse.main.apply_recommended_updates", return_value=UpdateResult()) as mock_apply,
         ):
             mock_scan_cls.return_value.get_results.return_value = {}
             mock_uniq = MagicMock()
@@ -306,6 +334,33 @@ class TestMainCommand:
 
         assert result.exit_code == 0
         mock_apply.assert_called_once()
+
+    def test_help_lists_option_environment_variables(self) -> None:
+        """Typer help text documents the env vars wired to each configurable option."""
+        result = runner.invoke(app, ["--help"])
+
+        assert result.exit_code == 0
+        # Rich help truncates long env var names; assert on the shared prefix.
+        assert result.output.count("GH_ACTION_PULSE_") >= 5
+        assert result.output.count("[env var:") >= 5
+
+    def test_options_can_be_set_from_environment_variables(self) -> None:
+        """Configured env vars are accepted when the matching CLI flags are omitted."""
+        with self._patched_main() as (_uniq, mock_apply):
+            result = runner.invoke(
+                app,
+                [],
+                env={
+                    "GH_ACTION_PULSE_DRY_RUN": "1",
+                    "GH_ACTION_PULSE_LOG_LEVEL": "WARNING",
+                    "GH_ACTION_PULSE_MIN_AGE": "7",
+                    "GH_ACTION_PULSE_MAX_AGE": "0",
+                    "GH_ACTION_PULSE_MINIMUM_NODEJS_VERSION": "0",
+                },
+            )
+
+        assert result.exit_code == 0
+        mock_apply.assert_called_once_with({}, _uniq, dry_run=True)
 
     @patch("gh_action_pulse.main.get_github_token")
     def test_missing_token_exits_with_dedicated_code(self, mock_get_token: MagicMock) -> None:
