@@ -2,9 +2,13 @@
 
 import logging
 import re
+import time
 from typing import TYPE_CHECKING
 
+from rich.progress import BarColumn, Progress, SpinnerColumn, TaskProgressColumn, TimeElapsedColumn
+
 from gh_action_pulse.actions import GithubAction, GithubActionNotFoundError
+from gh_action_pulse.console import console, phase_status
 
 logger = logging.getLogger(__name__)
 
@@ -26,7 +30,7 @@ class UniqGithubActions:
         """Parse action references from a scanned list of file matches."""
         action_pattern = re.compile(r"^\s*[-]?\s{0,1}uses:\s*([^@\s]+)@([^\s#]+)(?:\s+#\s+(.+))?")
 
-        logger.info("Parsing action references from scanned files with de-duplication...")
+        logger.debug("Parsing action references from scanned files with de-duplication...")
         for matches in full_list.values():
             for match_dict in matches:
                 for line in match_dict.values():
@@ -34,7 +38,7 @@ class UniqGithubActions:
                         name: str = match.group(1)
                         reference: str = match.group(2)
                         actual_description: str | None = match.group(3) if match.group(3) is not None else None
-                        logger.info(  # Maybe move this to debug level
+                        logger.debug(
                             "Found action \n=>name: %s \n=>reference: %s \n=>actual description: %s",
                             name,
                             reference,
@@ -46,7 +50,7 @@ class UniqGithubActions:
                             actual_description=actual_description,
                         )
                         self.add(action)
-        logger.info("Finished parsing action references. Total unique actions found: %d\n", len(self._actions))
+        logger.debug("Finished parsing action references. Total unique actions found: %d\n", len(self._actions))
 
     def add(self, action: GithubAction) -> None:
         """Add a unique GithubAction to the collection."""
@@ -69,7 +73,32 @@ class UniqGithubActions:
 
     def get_fully_qualified(self, g: Github, min_age: int) -> set[GithubAction]:
         """Update all actions in the collection with metadata from the GitHub API."""
-        return {action.get_fully_qualified(g, min_age) for action in self.get_actions()}
+        actions = list(self.get_actions())
+        if not actions:
+            return set()
+
+        qualified: set[GithubAction] = set()
+        started = time.perf_counter()
+        with Progress(
+            SpinnerColumn(),
+            "[progress.description]{task.description}",
+            BarColumn(),
+            TaskProgressColumn(),
+            TimeElapsedColumn(),
+            console=console,
+            transient=True,
+        ) as progress:
+            task_id = progress.add_task("Looking up upstream action metadata", total=len(actions))
+            for action in actions:
+                progress.update(task_id, description=f"Looking up upstream action metadata  {action.name}")
+                qualified.add(action.get_fully_qualified(g, min_age))
+                progress.advance(task_id)
+        phase_status(
+            "Looking up upstream action metadata…",
+            "OK",
+            elapsed=time.perf_counter() - started,
+        )
+        return qualified
 
     def get_stale_actions(self, max_age: int) -> list[GithubAction]:
         """Return actions whose min_age eligible tag is older than max_age."""

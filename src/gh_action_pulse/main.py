@@ -3,15 +3,21 @@
 import datetime
 import logging
 import re
+import time
+from dataclasses import dataclass, field
 from enum import StrEnum
 from pathlib import Path
 from typing import Annotated
 
 import typer
 from github import Auth, Github
+from rich.logging import RichHandler
+from rich.panel import Panel
+from rich.table import Table
 
 from gh_action_pulse import __version__
 from gh_action_pulse.actions import GithubAction, GithubActionArchivedError
+from gh_action_pulse.console import console, error, phase_status
 from gh_action_pulse.full_list_of_existing_actions import FullListOfExistingActions
 from gh_action_pulse.helpers.constants import (
     ARCHIVED_ACTION_ERROR_EXIT_CODE,
@@ -34,6 +40,24 @@ from gh_action_pulse.uniq_actions import UniqGithubActions
 
 logger = logging.getLogger(__name__)
 app = typer.Typer()
+
+
+@dataclass(frozen=True)
+class Replacement:
+    """A single uses-line rewrite proposed or applied by the tool."""
+
+    file: Path
+    line_number: int
+    old: str
+    new: str
+
+
+@dataclass
+class UpdateResult:
+    """Outcome of applying (or dry-running) recommended action updates."""
+
+    files_changed: int = 0
+    replacements: list[Replacement] = field(default_factory=list)
 
 
 def version_callback(*, value: bool) -> None:
@@ -104,6 +128,24 @@ class LogLevel(StrEnum):
     CRITICAL = "CRITICAL"
 
 
+def configure_logging(log_level: LogLevel) -> None:
+    """Configure logging with RichHandler for diagnostic output on stderr."""
+    logging.basicConfig(
+        level=getattr(logging, log_level),
+        format="%(message)s",
+        datefmt="[%X]",
+        handlers=[
+            RichHandler(
+                console=console,
+                show_path=False,
+                rich_tracebacks=True,
+                markup=False,
+            )
+        ],
+        force=True,
+    )
+
+
 def check_node_versions(
     g: Github,
     uniq_github_actions: UniqGithubActions,
@@ -113,9 +155,23 @@ def check_node_versions(
     if minimum_nodejs_version <= 0:
         return []
     checker = NodeVersionChecker(g, minimum_nodejs_version)
+    started = time.perf_counter()
     violations = checker.check_actions(uniq_github_actions.get_actions())
-    report_node_version_violations(violations, minimum_nodejs_version)
+    report_node_version_violations(
+        violations,
+        minimum_nodejs_version,
+        elapsed=time.perf_counter() - started,
+    )
     return violations
+
+
+def _format_uses_change(old_line: str, new_line: str) -> str:
+    """Build a compact old → new display for a rewritten uses line."""
+    old_match = re.search(r"uses:\s*(.+)$", old_line.strip())
+    new_match = re.search(r"uses:\s*(.+)$", new_line.strip())
+    old_ref = old_match.group(1) if old_match else old_line.strip()
+    new_ref = new_match.group(1) if new_match else new_line.strip()
+    return f"{old_ref} → {new_ref}"
 
 
 def apply_recommended_updates(
@@ -123,14 +179,16 @@ def apply_recommended_updates(
     uniq_github_actions: UniqGithubActions,
     *,
     dry_run: bool,
-) -> None:
+) -> UpdateResult:
     """Rewrite scanned files with recommended action references (unless in dry-run mode)."""
     action_pattern: re.Pattern[str] = re.compile(r"^\s*[-]?\s{0,1}uses:\s*([^@\s]+)@([^\s#]+)(?:\s+#\s+(.+))?")
+    result = UpdateResult()
+    started = time.perf_counter()
     for file, actions_list in results.items():
-        logger.info("Reading %s file to update github actions", file)
+        logger.debug("Reading %s file to update github actions", file)
         with Path.open(file) as f:
             file_lines = f.readlines()  # start with index 0
-        logger.info("%s file read to update github actions\n", file)
+        logger.debug("%s file read to update github actions\n", file)
         file_changed = False
         for action_with_line in actions_list:
             for line_number, full_line in action_with_line.items():
@@ -140,29 +198,93 @@ def apply_recommended_updates(
                     actual_description: str | None = match.group(3) if match.group(3) is not None else None
                     uniq_action = uniq_github_actions.get_item(name, actual_reference, actual_description)
                     if replacement := uniq_action.get_updated_uses_replacement(actual_reference, actual_description):
-                        logger.info("Changing line number: %s", line_number)
-                        logger.info("from:\n%s", file_lines[line_number - 1])
+                        old_line = file_lines[line_number - 1]
+                        logger.debug("Changing line number: %s", line_number)
+                        logger.debug("from:\n%s", old_line)
                         file_lines[line_number - 1] = re.sub(
                             pattern=r"^(\s*[-]?\s{0,1}uses:\s*)(?:[^@\s]+)@[^\s#]+(?:\s+#\s+.+)?",
                             repl=r"\1" + replacement,
                             string=file_lines[line_number - 1],
                         )
-                        logger.info("to:\n%s", file_lines[line_number - 1])
+                        new_line = file_lines[line_number - 1]
+                        logger.debug("to:\n%s", new_line)
+                        result.replacements.append(
+                            Replacement(
+                                file=file,
+                                line_number=line_number,
+                                old=old_line.rstrip("\n"),
+                                new=new_line.rstrip("\n"),
+                            )
+                        )
                         file_changed = True
         if file_changed:
+            result.files_changed += 1
             if dry_run:
-                logger.info("Dry Run Mode! So Would have normally update github actions in %s file", file)
+                logger.debug("Dry Run Mode! So Would have normally update github actions in %s file", file)
             else:
-                logger.info("Writing these changes to update github actions in %s file", file)
+                logger.debug("Writing these changes to update github actions in %s file", file)
                 with Path.open(file, mode="wt") as f:
                     f.writelines(file_lines)
-                logger.info("End of writing %s file to update github actions\n", file)
+                logger.debug("End of writing %s file to update github actions\n", file)
+
+    _print_updates_table(result, dry_run=dry_run, elapsed=time.perf_counter() - started)
+    return result
 
 
-def warn_about_stale_actions(stale_actions: list[GithubAction], max_age: int) -> None:
+def _print_updates_table(result: UpdateResult, *, dry_run: bool, elapsed: float | None = None) -> None:
+    """Render a Rich table of proposed or applied uses-line rewrites."""
+    if not result.replacements:
+        phase_status("Applying updates…", "No changes needed", elapsed=elapsed)
+        return
+
+    count = len(result.replacements)
+    status = f"{count} proposed" if dry_run else f"{count} applied"
+    style = "yellow" if dry_run else "cyan"
+    phase_status("Applying updates…", status, style=style, elapsed=elapsed)
+
+    title = "Updates (dry-run)" if dry_run else "Updates"
+    table = Table(title=title, show_header=True, header_style=style)
+    table.add_column("File")
+    table.add_column("Line", justify="right")
+    table.add_column("Change")
+    for replacement in result.replacements:
+        table.add_row(
+            str(replacement.file),
+            str(replacement.line_number),
+            _format_uses_change(replacement.old, replacement.new),
+        )
+    console.print(Panel(table, border_style=style))
+
+
+def warn_about_stale_actions(
+    stale_actions: list[GithubAction],
+    max_age: int,
+    *,
+    elapsed: float | None = None,
+) -> None:
     """Log warnings for actions whose min-age eligible tag exceeds the freshness threshold."""
+    if max_age <= 0:
+        return
+
+    if not stale_actions:
+        phase_status("Checking tag freshness…", "OK", elapsed=elapsed)
+        return
+
+    phase_status(
+        "Checking tag freshness…",
+        f"{len(stale_actions)} stale",
+        style="yellow",
+        elapsed=elapsed,
+    )
+
+    table = Table(title=f"Stale tags (max-age {max_age} days)", show_header=True, header_style="yellow")
+    table.add_column("Action")
+    table.add_column("Detail")
+
     for action in stale_actions:
         if not action.has_semver_tags:
+            detail = f"No semver tag found; cannot verify freshness within {max_age} days."
+            table.add_row(action.name, detail)
             logger.warning(
                 "No semver tag found for action '%s'; cannot verify tag freshness within %d days.",
                 action.name,
@@ -170,12 +292,44 @@ def warn_about_stale_actions(stale_actions: list[GithubAction], max_age: int) ->
             )
         elif action.min_age_tag_date is not None:
             age_days = (datetime.datetime.now(datetime.UTC) - action.min_age_tag_date.astimezone(datetime.UTC)).days
+            detail = f"{age_days} days old (limit: {max_age} days)"
+            table.add_row(action.name, detail)
             logger.error(
                 "Min-age eligible tag for action '%s' is %d days old (limit: %d days).",
                 action.name,
                 age_days,
                 max_age,
             )
+    console.print(table)
+
+
+def _print_summary(
+    *,
+    update_result: UpdateResult,
+    stale_actions: list[GithubAction],
+    node_version_violations: list[NodeVersionViolation],
+    dry_run: bool,
+    exit_code: int,
+) -> None:
+    """Print a final Rich Panel summarizing the run outcome."""
+    parts: list[str] = []
+    update_count = len(update_result.replacements)
+    if update_count:
+        verb = "proposed" if dry_run else "applied"
+        parts.append(f"{update_count} update{'s' if update_count != 1 else ''} {verb}")
+    else:
+        parts.append("no updates")
+
+    if stale_actions:
+        parts.append(f"{len(stale_actions)} stale tag{'s' if len(stale_actions) != 1 else ''}")
+    if node_version_violations:
+        parts.append(
+            f"{len(node_version_violations)} Node.js violation{'s' if len(node_version_violations) != 1 else ''}"
+        )
+
+    parts.append(f"exit {exit_code}")
+    border = "green" if exit_code == 0 else "red"
+    console.print(Panel(" · ".join(parts), title="Summary", border_style=border))
 
 
 @app.command(help="Scan for 'uses:' statements in GitHub Actions workflow and action definition files.")
@@ -238,16 +392,18 @@ def main(
     ] = DEFAULT_MINIMUM_NODEJS_VERSION,
 ) -> None:
     """Main function to scan for 'uses:' statements and analyze them."""
-    logging.basicConfig(level=getattr(logging, log_level), format="%(message)s")
+    configure_logging(log_level)
 
     try:
         token = get_github_token()
     except RuntimeError as e:
+        error("Failed to get GitHub token")
         logger.exception("Failed to get GitHub token")
         raise typer.Exit(code=GITHUB_TOKEN_ERROR_EXIT_CODE) from e
 
     g = Github(auth=Auth.Token(token))
 
+    scan_started = time.perf_counter()
     full_list_of_existing_actions = FullListOfExistingActions(
         search_configs=SEARCH_CONFIGS,
     )
@@ -255,24 +411,68 @@ def main(
 
     uniq_github_actions = UniqGithubActions()
     uniq_github_actions.init_from_full_list(results)
+    phase_status(
+        "Scanning workflows and action definitions…",
+        "OK",
+        elapsed=time.perf_counter() - scan_started,
+    )
+    console.print(
+        f"  Found [cyan]{len(uniq_github_actions.get_actions())}[/cyan] unique actions "
+        f"in [cyan]{len(results)}[/cyan] files"
+    )
 
     try:
         uniq_github_actions.get_fully_qualified(g, min_age_in_days)
-    except GithubActionArchivedError:
+    except GithubActionArchivedError as exc:
+        error(str(exc))
+        _print_summary(
+            update_result=UpdateResult(),
+            stale_actions=[],
+            node_version_violations=[],
+            dry_run=dry_run,
+            exit_code=ARCHIVED_ACTION_ERROR_EXIT_CODE,
+        )
         raise typer.Exit(code=ARCHIVED_ACTION_ERROR_EXIT_CODE) from None
 
+    stale_started = time.perf_counter()
     stale_actions = uniq_github_actions.get_stale_actions(max_age_in_days)
-    warn_about_stale_actions(stale_actions, max_age_in_days)
+    warn_about_stale_actions(
+        stale_actions,
+        max_age_in_days,
+        elapsed=time.perf_counter() - stale_started,
+    )
 
     node_version_violations = check_node_versions(g, uniq_github_actions, minimum_nodejs_version)
 
-    apply_recommended_updates(results, uniq_github_actions, dry_run=dry_run)
+    update_result = apply_recommended_updates(results, uniq_github_actions, dry_run=dry_run)
 
     if node_version_violations:
+        _print_summary(
+            update_result=update_result,
+            stale_actions=stale_actions,
+            node_version_violations=node_version_violations,
+            dry_run=dry_run,
+            exit_code=NODEJS_VERSION_ERROR_EXIT_CODE,
+        )
         raise typer.Exit(code=NODEJS_VERSION_ERROR_EXIT_CODE)
 
     if stale_actions:
+        _print_summary(
+            update_result=update_result,
+            stale_actions=stale_actions,
+            node_version_violations=node_version_violations,
+            dry_run=dry_run,
+            exit_code=STALE_TAG_ERROR_EXIT_CODE,
+        )
         raise typer.Exit(code=STALE_TAG_ERROR_EXIT_CODE)
+
+    _print_summary(
+        update_result=update_result,
+        stale_actions=stale_actions,
+        node_version_violations=node_version_violations,
+        dry_run=dry_run,
+        exit_code=0,
+    )
 
 
 # Run the main function when the script is executed directly (useful for vscode debugger)

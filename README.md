@@ -124,6 +124,17 @@ Print the installed version:
 gh-action-pulse --version
 ```
 
+### Output
+
+The CLI uses [Rich](https://github.com/Textualize/rich) for progress and summaries on stderr:
+
+- a progress bar while enriching actions from the GitHub API (and while checking Node.js runtimes);
+- colored phase lines for scan, freshness, and Node.js checks;
+- a table of proposed or applied `uses:` rewrites (yellow header in `--dry-run`);
+- a closing summary panel with update counts, warnings, and the exit code.
+
+Routine per-file and per-action chatter is logged at `DEBUG`. Use `--log-level DEBUG` (or `WARNING` / `ERROR`) when you need diagnostic detail; warnings and errors still use Rich-formatted logging without repeating the main user-facing summary.
+
 ## CLI Options
 
 - `--dry-run`: show the updates without writing files.

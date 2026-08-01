@@ -18,6 +18,10 @@ from typing import TYPE_CHECKING
 
 import yaml
 from github.GithubException import GithubException
+from rich.progress import BarColumn, Progress, SpinnerColumn, TaskProgressColumn, TimeElapsedColumn
+from rich.table import Table
+
+from gh_action_pulse.console import console, phase_status
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
@@ -80,14 +84,32 @@ class NodeVersionChecker:  # pylint: disable=too-few-public-methods
 
     def check_actions(self, actions: Iterable[GithubAction]) -> list[NodeVersionViolation]:
         """Resolve each action at its recommended reference and return the violations found."""
-        logger.info("Checking that recommended actions run on at least Node.js %d...", self._minimum)
-        for action in actions:
-            target = self._recommended_target(action)
-            if target is None:
-                continue
-            location, action_dir, display = target
-            self._walk(location, action_dir, display, ())
-        logger.info(
+        action_list = list(actions)
+        logger.debug("Checking that recommended actions run on at least Node.js %d...", self._minimum)
+        if not action_list:
+            return self._violations
+
+        with Progress(
+            SpinnerColumn(),
+            "[progress.description]{task.description}",
+            BarColumn(),
+            TaskProgressColumn(),
+            TimeElapsedColumn(),
+            console=console,
+            transient=True,
+        ) as progress:
+            task_id = progress.add_task(f"Checking Node.js >= {self._minimum}", total=len(action_list))
+            for action in action_list:
+                progress.update(
+                    task_id,
+                    description=f"Checking Node.js >= {self._minimum}  {action.name}",
+                )
+                target = self._recommended_target(action)
+                if target is not None:
+                    location, action_dir, display = target
+                    self._walk(location, action_dir, display, ())
+                progress.advance(task_id)
+        logger.debug(
             "Finished Node.js version check. Found %d action(s) below the minimum.\n",
             len(self._violations),
         )
@@ -245,9 +267,27 @@ class NodeVersionChecker:  # pylint: disable=too-few-public-methods
         return self._repos[repo_full_name]
 
 
-def report_node_version_violations(violations: Iterable[NodeVersionViolation], minimum_version: int) -> None:
-    """Log an error for each action running below the required Node.js version."""
-    for violation in violations:
+def report_node_version_violations(
+    violations: Iterable[NodeVersionViolation],
+    minimum_version: int,
+    *,
+    elapsed: float | None = None,
+) -> None:
+    """Log and display each action running below the required Node.js version."""
+    violation_list = list(violations)
+    label = f"Checking Node.js >= {minimum_version}…"
+    if not violation_list:
+        phase_status(label, "OK", elapsed=elapsed)
+        return
+
+    phase_status(label, f"{len(violation_list)} violation(s)", style="red", elapsed=elapsed)
+
+    table = Table(title=f"Node.js < {minimum_version}", show_header=True, header_style="red")
+    table.add_column("Action")
+    table.add_column("Node")
+    table.add_column("Chain")
+    for violation in violation_list:
+        table.add_row(violation.action, str(violation.node_version), violation.format_chain())
         logger.error(
             "Action '%s' runs on Node.js %d which is below the required minimum of %d (dependency chain: %s).",
             violation.action,
@@ -255,3 +295,4 @@ def report_node_version_violations(violations: Iterable[NodeVersionViolation], m
             minimum_version,
             violation.format_chain(),
         )
+    console.print(table)
