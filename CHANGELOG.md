@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.1.0](https://github.com/jylenhof/gh-action-pulse/compare/v1.0.0...v1.1.0) (2026-08-01)
+
+
+### Features
+
+* add Rich progress, phase status, and run summaries to the CLI ([#110](https://github.com/jylenhof/gh-action-pulse/issues/110)) ([4fe1476](https://github.com/jylenhof/gh-action-pulse/commit/4fe1476148d0c1bd96489e4c89aba01ea58de628))
+
+
+### Bug Fixes
+
+* update mise-update-tool version containing github mentions sanitize ([76443f9](https://github.com/jylenhof/gh-action-pulse/commit/76443f98b2c812e08dc256863ec00c3262d91378))
+
 ## [1.0.0](https://github.com/jylenhof/gh-action-pulse/compare/v0.5.2...v1.0.0) (2026-07-15)
 
 
