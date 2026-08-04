@@ -51,7 +51,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_ACTION_PULSE_LOG_LEVEL: ${{ runner.debug == '1' && 'DEBUG' || 'INFO' }}
         run: |-
-          uv run --frozen gh-action-pulse
+          uv run --frozen --no-dev gh-action-pulse
           if ! git diff --quiet; then
             echo "::error::gh-action-pulse updates are not applied."
             echo "Run 'uv run gh-action-pulse' locally and commit the changes."
