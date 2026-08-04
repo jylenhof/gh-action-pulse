@@ -104,9 +104,11 @@ repos:
         files: '(\.github/actions/.*/action\.ya?ml|action\.ya?ml)$'
       - id: zizmor
         name: zizmor
-        entry: "zizmor ."
+        # limit scope because of bug: https://github.com/zizmorcore/zizmor/issues/2258
+        entry: "zizmor . --collect workflows,actions,dependabot"
         language: system
         files: '(\.github/(workflows/.*|actions/.*/action|dependabot\.ya?ml))|(action\.ya?ml)$'
+        pass_filenames: false
 
       # python checks
       - id: uv-sync
