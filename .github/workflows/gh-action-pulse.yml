@@ -39,7 +39,7 @@ jobs:
           persist-credentials: false
 
       - name: Set up mise
-        uses: jdx/mise-action@9e7f7633ff6f6d6048a9418a68d48f288f50eb14 # v4.2.3
+        uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
         env:
           MISE_INSTALL_FROM_GITHUB: 1
         with:
@@ -51,7 +51,8 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_ACTION_PULSE_LOG_LEVEL: ${{ runner.debug == '1' && 'DEBUG' || 'INFO' }}
         run: |-
-          uv run --frozen --no-dev gh-action-pulse
+          # download-artifact last tag is 150 days... so move up limit
+          uv run --frozen --no-dev gh-action-pulse --max-age 200
           if ! git diff --quiet; then
             echo "::error::gh-action-pulse updates are not applied."
             echo "Run 'uv run gh-action-pulse' locally and commit the changes."
