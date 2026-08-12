@@ -10,6 +10,8 @@ updates:
     open-pull-requests-limit: 5
     reviewers:
       - jylenhof
+    assignees:
+      - jylenhof
     commit-message:
       prefix: "chore"
     labels:
@@ -29,6 +31,8 @@ updates:
     open-pull-requests-limit: 5
     reviewers:
       - jylenhof
+    assignees:
+      - jylenhof
     commit-message:
       prefix: "chore"
     labels:
@@ -47,6 +51,8 @@ updates:
       timezone: Europe/Paris
     open-pull-requests-limit: 5
     reviewers:
+      - jylenhof
+    assignees:
       - jylenhof
     commit-message:
       prefix: "chore"
