@@ -4,8 +4,12 @@ updates:
   - package-ecosystem: github-actions
     directory: /
     schedule:
-      interval: weekly
-      day: monday
+      interval: daily
+      time: "06:00"
+      timezone: Europe/Paris
+    open-pull-requests-limit: 5
+    reviewers:
+      - jylenhof
     commit-message:
       prefix: "chore"
     labels:
@@ -19,8 +23,12 @@ updates:
   - package-ecosystem: pre-commit
     directory: /
     schedule:
-      interval: weekly
-      day: monday
+      interval: daily
+      time: "06:00"
+      timezone: Europe/Paris
+    open-pull-requests-limit: 5
+    reviewers:
+      - jylenhof
     commit-message:
       prefix: "chore"
     labels:
@@ -34,8 +42,12 @@ updates:
   - package-ecosystem: uv
     directory: /
     schedule:
-      interval: weekly
-      day: monday
+      interval: daily
+      time: "06:00"
+      timezone: Europe/Paris
+    open-pull-requests-limit: 5
+    reviewers:
+      - jylenhof
     commit-message:
       prefix: "chore"
     labels:
