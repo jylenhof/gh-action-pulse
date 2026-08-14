@@ -239,7 +239,7 @@ defining-attr-methods = [
   "__new__",
   "setUp",
   "asyncSetUp",
-  "__post_init__"
+  "__post_init__",
 ]
 
 # List of member names, which should be excluded from the protected access
@@ -250,7 +250,7 @@ exclude-protected = [
   "_replace",
   "_source",
   "_make",
-  "os._exit"
+  "os._exit",
 ]
 
 # List of valid names for the first argument in a class method.
@@ -384,7 +384,7 @@ confidence = [
   "CONTROL_FLOW",
   "INFERENCE",
   "INFERENCE_FAILURE",
-  "UNDEFINED"
+  "UNDEFINED",
 ]
 
 # Disable the message, report, category or checker with the given id(s). You can
@@ -508,7 +508,7 @@ timeout-methods = [
   "requests.api.patch",
   "requests.api.post",
   "requests.api.put",
-  "requests.api.request"
+  "requests.api.request",
 ]
 
 [tool.pylint.miscellaneous]
@@ -627,7 +627,7 @@ ignored-checks-for-mixins = [
   "no-member",
   "not-async-context-manager",
   "not-context-manager",
-  "attribute-defined-outside-init"
+  "attribute-defined-outside-init",
 ]
 
 # List of class names for which member attributes should not be checked (useful
@@ -637,7 +637,7 @@ ignored-classes = [
   "optparse.Values",
   "thread._local",
   "_thread._local",
-  "argparse.Namespace"
+  "argparse.Namespace",
 ]
 
 # Show a hint with possible names when a member name was not found. The aspect of
@@ -690,5 +690,5 @@ redefining-builtins-modules = [
   "past.builtins",
   "future.builtins",
   "builtins",
-  "io"
+  "io",
 ]
