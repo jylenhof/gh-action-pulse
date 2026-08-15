@@ -43,16 +43,18 @@ class UniqGithubActions:
 
     def init_from_full_list(self, full_list: dict[Path, list[dict[int, str]]]) -> None:
         """Parse action references from a scanned list of file matches."""
-        action_pattern = re.compile(r"^\s*[-]?\s{0,1}uses:\s*([^@\s]+)@([^\s#]+)(?:\s+#\s+(.+))?")
+        action_pattern = re.compile(
+            r"^\s*[-]?\s{0,1}uses:\s*(?P<name>[^@\s]+)@(?P<reference>[^\s#]+)(?:\s+#\s+(?P<description>.+))?"
+        )
 
         logger.debug("Parsing action references from scanned files with de-duplication...")
         for matches in full_list.values():
             for match_dict in matches:
                 for line in match_dict.values():
                     if match := action_pattern.search(line):
-                        name: str = match.group(1)
-                        reference: str = match.group(2)
-                        actual_description: str | None = match.group(3) if match.group(3) is not None else None
+                        name: str = match.group("name")
+                        reference: str = match.group("reference")
+                        actual_description: str | None = match.group("description")
                         logger.debug(
                             "Found action \n=>name: %s \n=>reference: %s \n=>actual description: %s",
                             name,
