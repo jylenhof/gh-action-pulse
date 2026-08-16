@@ -845,7 +845,7 @@ class TestGithubAction:
         mock__set_recommended_to_branch: MagicMock,
         mock__set_recommended_reference_and_date_to_tag_if_exists: MagicMock,
     ) -> None:
-        """Equal tag and branch dates should prefer the branch recommendation."""
+        """Equal tag and branch dates should prefer the tag annotation over the branch name."""
         action = GithubAction("actions/checkout", "main")
         same_date = datetime.datetime(2026, 1, 3, tzinfo=datetime.UTC)
         action.actual.date = same_date
@@ -855,7 +855,7 @@ class TestGithubAction:
         action._set_recommended_with_fallback([mock_tag_v6], "main")
 
         mock__set_recommended_reference_and_date_to_tag_if_exists.assert_called_once_with([mock_tag_v6])
-        mock__set_recommended_to_branch.assert_called_once_with("main")
+        mock__set_recommended_to_branch.assert_not_called()
 
     def test__set_recommended_reference_and_date_to_tag_if_exists_with_valid_tags(self) -> None:
         """Checks that _set_recommended_reference_and_date_to_tag_if_exists sets the recommended ref and date."""

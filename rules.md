@@ -13,13 +13,13 @@ action@tag # bullshit
   (if no newer eligible tag exists, keep pinned tag to avoid downgrade)
 
 action@branch
-=> if exist, sha of newest semver tag meeting `min_age` + comment # tag if date of this tag is newer than actual last commit of this branch, otherwise sha of last commit of this branch + comment # branch
+=> if exist, sha of newest semver tag meeting `min_age` + comment # tag if date of this tag is newer than or equal to the last commit of this branch, otherwise sha of last commit of this branch + comment # branch
 
 action@branch # branch
-=> if exist, sha of newest semver tag meeting `min_age` + comment # tag if date of this tag is newer than actual last commit of this branch, otherwise sha of last commit of this branch + comment # branch
+=> if exist, sha of newest semver tag meeting `min_age` + comment # tag if date of this tag is newer than or equal to the last commit of this branch, otherwise sha of last commit of this branch + comment # branch
 
 action@branch # bullshit
-=> if exist, sha of newest semver tag meeting `min_age` + comment # tag if date of this tag is newer than actual last commit of this branch, otherwise sha of last commit of this branch + comment # branch
+=> if exist, sha of newest semver tag meeting `min_age` + comment # tag if date of this tag is newer than or equal to the last commit of this branch, otherwise sha of last commit of this branch + comment # branch
 
 action@sha
 => if existing sha is related to a tag, sha of newest semver tag meeting `min_age` + comment # tag
@@ -30,7 +30,7 @@ action@sha # tag
   (if pinned tag is too young and no newer eligible tag exists, keep pinned tag)
 
 action@sha # branch
-=> if exist sha of newest semver tag meeting `min_age` + comment # tag if date of this tag is newer than actual date of this commit sha, otherwise find latest sha of this branch + comment # branch
+=> if exist sha of newest semver tag meeting `min_age` + comment # tag if date of this tag is newer than or equal to the actual date of this commit sha, otherwise find latest sha of this branch + comment # branch
 
 action@sha # bullshit
 => if existing sha is related to a tag, sha of newest semver tag meeting `min_age` + comment # tag

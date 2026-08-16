@@ -362,11 +362,11 @@ class GithubAction:
             )
 
     def _set_recommended_with_fallback(self, valid_tags: Sequence[Tag], branch_name: str) -> None:
-        """Recommend a tag when it is newer than the branch tip, otherwise keep the branch."""
+        """Recommend a tag when it is at least as new as the branch tip, otherwise keep the branch."""
         self._set_recommended_reference_and_date_to_tag_if_exists(valid_tags)
 
         should_use_branch = self.recommended.date is None or (
-            self.actual.date is not None and self.recommended.date <= self.actual.date
+            self.actual.date is not None and self.recommended.date < self.actual.date
         )
 
         if should_use_branch:
