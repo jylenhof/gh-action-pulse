@@ -75,6 +75,32 @@ class TestUniqGithubActions:
         uniq = UniqGithubActions()
         uniq.init_from_full_list(full_list=full_list)
         assert len(uniq._actions) == 3
+        checkout = uniq.get_item("actions/checkout", "v4.0.0", "v4.0.0")
+        assert checkout.actual.description == "v4.0.0"
+        setup_python = uniq.get_item("actions/setup-python", "v5", None)
+        assert setup_python.actual.description is None
+
+    def test_init_from_full_list_uses_first_comment_as_description(self) -> None:
+        """Verify only the first trailing comment is stored as the action description."""
+        full_list = {
+            Path("test.yml"): [
+                {1: "uses: actions/checkout@abc123 # v4.2.2 # extra note"},
+                {2: ("uses: actions/setup-python@def456 # v5.0.0 # gh-action-pulse: ignore[max-days]")},
+                {3: "uses: actions/cache@ghi789 # gh-action-pulse: ignore[max-days]"},
+            ]
+        }
+        uniq = UniqGithubActions()
+        uniq.init_from_full_list(full_list)
+
+        checkout = uniq.get_item("actions/checkout", "abc123", "v4.2.2")
+        assert checkout.actual.description == "v4.2.2"
+        assert checkout.actual.comments == ["v4.2.2", "extra note"]
+        setup_python = uniq.get_item("actions/setup-python", "def456", "v5.0.0")
+        assert setup_python.actual.description == "v5.0.0"
+        assert setup_python.actual.comments == ["v5.0.0", "gh-action-pulse: ignore[max-days]"]
+        cache = uniq.get_item("actions/cache", "ghi789", "gh-action-pulse: ignore[max-days]")
+        assert cache.actual.description == "gh-action-pulse: ignore[max-days]"
+        assert cache.actual.comments == ["gh-action-pulse: ignore[max-days]"]
 
     def test_init_from_full_list_with_mixed_content(self) -> None:
         """Verify that valid actions are parsed and invalid ones (like local actions) are skipped."""
@@ -170,6 +196,21 @@ class TestUniqGithubActions:
 
         with pytest.raises(GithubActionNotFoundError):
             uniq_actions.get_item(name="actions/checkout", reference="v6.0.0", description="v4.0.0")
+
+    def test_get_item_matches_exact_comments(self) -> None:
+        """Actions that share a pin but differ in extra comments must not be confused."""
+        uniq_actions = UniqGithubActions()
+        shared = ("actions/checkout", "abc123", "v4.2.0")
+        with_ignore = GithubAction(*shared, comments=["v4.2.0", "gh-action-pulse: ignore[max-days]"])
+        with_note = GithubAction(*shared, comments=["v4.2.0", "keep me"])
+        uniq_actions.add(with_ignore)
+        uniq_actions.add(with_note)
+
+        assert uniq_actions.get_item(*shared) in {with_ignore, with_note}
+        assert uniq_actions.get_item(*shared, comments=["v4.2.0", "gh-action-pulse: ignore[max-days]"]) is with_ignore
+        assert uniq_actions.get_item(*shared, comments=["v4.2.0", "keep me"]) is with_note
+        with pytest.raises(GithubActionNotFoundError):
+            uniq_actions.get_item(*shared, comments=["v4.2.0"])
 
     def test_get_stale_actions_returns_stale_actions(self) -> None:
         """Verify get_stale_actions returns actions with min-age eligible tags older than the threshold."""

@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import datetime
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Literal
 
 import semver
@@ -42,6 +42,7 @@ class ActualState:
 
     reference: str
     description: str | None = None
+    comments: list[str] = field(default_factory=list)
     reference_type: Literal["sha", "tag", "branch", "bullshit"] | None = None
     description_type: Literal["tag", "branch", "bullshit"] | None = None
     date: datetime.datetime | None = None
@@ -54,6 +55,7 @@ class Recommendation:
     reference: str | None = None
     date: datetime.datetime | None = None
     description: str | None = None
+    comments: list[str] = field(default_factory=list)
     repo_canonical_name: str | None = None
 
 
@@ -87,15 +89,20 @@ class GithubAction:
         name: str,
         reference: str,
         actual_description: str | None = None,
+        comments: list[str] | None = None,
     ) -> None:
         """Initialize a GithubAction with its name, reference, and optional description."""
         self.name = name
-        self.actual = ActualState(reference=reference, description=actual_description)
+        self.actual = ActualState(
+            reference=reference,
+            description=actual_description,
+            comments=list(comments) if comments is not None else [],
+        )
         self.recommended = Recommendation()
 
     def __hash__(self) -> int:
-        """Return a hash based on the action name, reference, and description."""
-        return hash((self.name, self.actual.reference, self.actual.description))
+        """Return a hash based on the action name, reference, description, and comments."""
+        return hash((self.name, self.actual.reference, self.actual.description, tuple(self.actual.comments)))
 
     def __eq__(self, other: object) -> bool:
         """Compare two GithubAction instances for equality."""
@@ -155,15 +162,17 @@ class GithubAction:
         self.recommended.repo_canonical_name = f"{canonical_repo}/{subpath}" if subpath else canonical_repo
         logger.debug("Action '%s' redirects to '%s'", self.name, self.recommended.repo_canonical_name)
 
-    def _build_uses_content(self, action_name: str, reference: str, description: str | None) -> str:
-        if description:
-            return f"{action_name}@{reference} # {description}"
-        return f"{action_name}@{reference}"
+    def _build_uses_content(self, action_name: str, reference: str, comments: Sequence[str] | None) -> str:
+        uses_content = f"{action_name}@{reference}"
+        if comments:
+            for comment in comments:
+                uses_content += f" # {comment}"
+        return uses_content
 
     def get_updated_uses_replacement(
         self,
         actual_reference: str,
-        actual_description: str | None,
+        actual_comments: Sequence[str] | None,
     ) -> str | None:
         """Return replacement content after 'uses: ', or None when no update is needed."""
         action_name = self.recommended.repo_canonical_name or self.name
@@ -172,14 +181,14 @@ class GithubAction:
             replacement = self._build_uses_content(
                 action_name,
                 self.recommended.reference,
-                self.recommended.description,
+                self.recommended.comments,
             )
         elif self.recommended.repo_canonical_name is not None:
-            replacement = self._build_uses_content(action_name, actual_reference, actual_description)
+            replacement = self._build_uses_content(action_name, actual_reference, actual_comments)
         else:
             return None
 
-        current = self._build_uses_content(self.name, actual_reference, actual_description)
+        current = self._build_uses_content(self.name, actual_reference, actual_comments)
         if replacement == current:
             return None
         return replacement
@@ -244,7 +253,7 @@ class GithubAction:
     def _set_recommended_reference_and_date(self) -> None:
         """Orchestrates the recommendation logic based on reference type and versioning."""
         valid_semver_tags = self._get_valid_semver_tags()
-
+        self.recommended.comments = list(self.actual.comments)
         match self.actual.reference_type:
             case "tag":
                 self._set_recommended_reference_and_date_to_tag_if_exists(valid_semver_tags)
@@ -258,6 +267,14 @@ class GithubAction:
             case _:
                 logger.error("Unknown reference type encountered, that should not happen.")
                 raise SystemExit(1)
+        if self.recommended.description is not None:  # Should always be the case, just make linter happy
+            if self.actual.description_type in ["tag", "branch"] and self.recommended.comments:
+                self.recommended.comments[0] = self.recommended.description
+            else:
+                self.recommended.comments.insert(0, self.recommended.description)
+        else:
+            msg = "Recommended description is None, that should not happen."
+            raise ValueError(msg)
 
     def _get_valid_semver_tags(self) -> list[Tag]:
         valid_semver_tags = []

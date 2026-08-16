@@ -38,3 +38,15 @@ action@sha # bullshit
 
 action@bullshit
 => full exit error on this one !
+
+Extra `#` comments after the first trailing comment (for example `gh-action-pulse: ignore[max-days]`)
+are preserved when rewriting a `uses:` line. If the first comment is a tag or branch, it is
+updated to the recommended description; otherwise the recommended description is inserted
+in front of the existing comments.
+
+action@sha # tag # extra
+=> sha of newest semver tag meeting `min_age` and >= pinned tag, preserving extra comments
+
+action@sha # extra
+=> if existing sha is related to a tag, sha of newest semver tag meeting `min_age` + comment # tag # extra
+=> if not, find latest sha in all branches related to this commit sha + comment # branch # extra

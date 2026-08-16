@@ -16,7 +16,6 @@
 """Defines the UniqGithubActions collection for deduplicated action references."""
 
 import logging
-import re
 import time
 from typing import TYPE_CHECKING
 
@@ -24,6 +23,7 @@ from rich.progress import BarColumn, Progress, SpinnerColumn, TaskProgressColumn
 
 from gh_action_pulse.actions import GithubAction, GithubActionNotFoundError
 from gh_action_pulse.helpers.console import console, phase_status
+from gh_action_pulse.helpers.uses_line import USES_LINE_PATTERN, parse_trailing_comments
 
 logger = logging.getLogger(__name__)
 
@@ -43,28 +43,27 @@ class UniqGithubActions:
 
     def init_from_full_list(self, full_list: dict[Path, list[dict[int, str]]]) -> None:
         """Parse action references from a scanned list of file matches."""
-        action_pattern = re.compile(
-            r"^\s*[-]?\s{0,1}uses:\s*(?P<name>[^@\s]+)@(?P<reference>[^\s#]+)(?:\s+#\s+(?P<description>.+))?"
-        )
-
         logger.debug("Parsing action references from scanned files with de-duplication...")
         for matches in full_list.values():
             for match_dict in matches:
                 for line in match_dict.values():
-                    if match := action_pattern.search(line):
+                    if match := USES_LINE_PATTERN.search(line):
                         name: str = match.group("name")
                         reference: str = match.group("reference")
-                        actual_description: str | None = match.group("description")
+                        actual_description, actual_comments = parse_trailing_comments(match.group("comments"))
                         logger.debug(
-                            "Found action \n=>name: %s \n=>reference: %s \n=>actual description: %s",
+                            "Found action \n=>name: %s \n=>reference: %s \n=>actual description: %s"
+                            " \n=>actual_comments: %s",
                             name,
                             reference,
                             actual_description,
+                            actual_comments,
                         )
                         action = GithubAction(
                             name=name,
                             reference=reference,
                             actual_description=actual_description,
+                            comments=actual_comments,
                         )
                         self.add(action)
         logger.debug("Finished parsing action references. Total unique actions found: %d\n", len(self._actions))
@@ -81,10 +80,21 @@ class UniqGithubActions:
         """Allow indexing into the set of actions."""
         return list(self._actions)[index]
 
-    def get_item(self, name: str, reference: str, description: str | None) -> GithubAction:
-        """Look for GithubAction which is named name with 'reference' reference and has 'description' description."""
+    def get_item(
+        self,
+        name: str,
+        reference: str,
+        description: str | None,
+        comments: list[str] | None = None,
+    ) -> GithubAction:
+        """Look up a GithubAction by name, reference, description, and optional comments."""
         for i in self._actions:
-            if i.name == name and i.actual.reference == reference and i.actual.description == description:
+            if (
+                i.name == name
+                and i.actual.reference == reference
+                and i.actual.description == description
+                and (comments is None or i.actual.comments == comments)
+            ):
                 return i
         raise GithubActionNotFoundError
 

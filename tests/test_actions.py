@@ -15,6 +15,8 @@
 
 """Tests for the GithubAction class to ensure correct parsing and comparison."""
 
+# pylint: disable=too-many-lines
+
 import datetime
 from typing import TYPE_CHECKING, Literal
 from unittest.mock import MagicMock, patch
@@ -52,12 +54,15 @@ class TestGithubAction:
         a1 = GithubAction("repo", "v1", "desc")
         a2 = GithubAction("repo", "v1", "desc")
         a3 = GithubAction("repo", "v2", "desc")
+        a4 = GithubAction("repo", "v1", "desc", comments=["desc", "gh-action-pulse: ignore[max-days]"])
 
         assert a1 == a2
         assert a1 != a3
+        assert a1 != a4
         assert len({a1, a2}) == 1
+        assert len({a1, a4}) == 2
 
-        # Coverage for line 73: comparison with a different type
+        # Coverage for comparison with a different type
         assert a1 != "not a GithubAction"
 
     @patch("gh_action_pulse.actions.GithubAction._set_actual_reference_type_and_date")
@@ -172,8 +177,26 @@ class TestGithubAction:
         action = GithubAction("actions/checkout", actual_reference, actual_description)
         action.recommended.repo_canonical_name = repo_canonical_name
         action.recommended.reference, action.recommended.description = recommended
+        if recommended[1] is not None:
+            action.recommended.comments = [recommended[1]]
+        actual_comments = [actual_description] if actual_description else []
 
-        assert action.get_updated_uses_replacement(actual_reference, actual_description) == expected
+        assert action.get_updated_uses_replacement(actual_reference, actual_comments) == expected
+
+    def test_get_updated_uses_replacement_joins_multiple_comments(self) -> None:
+        """Each trailing comment is prefixed with '# ' when building uses content."""
+        action = GithubAction("actions/checkout", "abc123", "v4.0.0")
+        action.recommended.reference = "def456"
+        action.recommended.description = "v4.1.0"
+        action.recommended.comments = ["v4.1.0", "keep this", "gh-action-pulse: ignore[max-days]"]
+
+        assert (
+            action.get_updated_uses_replacement(
+                "abc123",
+                ["v4.0.0", "keep this", "gh-action-pulse: ignore[max-days]"],
+            )
+            == "actions/checkout@def456 # v4.1.0 # keep this # gh-action-pulse: ignore[max-days]"
+        )
 
     def test__set_actual_reference_type_and_date_with_tag(self) -> None:
         """Verify that _set_actual_reference_type_and_date correctly identifies the reference type and date."""
@@ -356,6 +379,11 @@ class TestGithubAction:
         mock__get_valid_semver_tags.return_value = [mock_tag_v6, mock_tag_v4]
         mock_valid_semver_tags = mock__get_valid_semver_tags.return_value
 
+        def set_recommendation(_tags: list) -> None:
+            action.recommended.description = "v6.0.0"
+
+        mock__set_recommended_reference_and_date_to_tag_if_exists.side_effect = set_recommendation
+
         action._set_recommended_reference_and_date()
 
         mock__get_valid_semver_tags.assert_called_once_with()
@@ -377,6 +405,11 @@ class TestGithubAction:
         mock_tag_v6 = MagicMock()
         mock__get_valid_semver_tags.return_value = [mock_tag_v6, mock_tag_v4]
         mock_valid_semver_tags = mock__get_valid_semver_tags.return_value
+
+        def set_recommendation(_tags: list, _branch_name: str) -> None:
+            action.recommended.description = "main"
+
+        mock__set_recommended_with_fallback.side_effect = set_recommendation
 
         action._set_recommended_reference_and_date()
 
@@ -400,10 +433,75 @@ class TestGithubAction:
         mock__get_valid_semver_tags.return_value = [mock_tag_v6, mock_tag_v4]
         mock_valid_semver_tags = mock__get_valid_semver_tags.return_value
 
+        def set_recommendation(_tags: list) -> None:
+            action.recommended.description = "v4.0.0"
+
+        mock__set_recommended_for_sha.side_effect = set_recommendation
+
         action._set_recommended_reference_and_date()
 
         mock__get_valid_semver_tags.assert_called_once_with()
         mock__set_recommended_for_sha.assert_called_once_with(mock_valid_semver_tags)
+
+    @patch("gh_action_pulse.actions.GithubAction._get_valid_semver_tags")
+    @patch("gh_action_pulse.actions.GithubAction._set_recommended_for_sha")
+    def test__set_recommended_reference_and_date_does_not_mutate_actual_comments(
+        self,
+        mock__set_recommended_for_sha: MagicMock,
+        mock__get_valid_semver_tags: MagicMock,
+    ) -> None:
+        """Updating the version comment must not rewrite the original comments used for lookup."""
+        original_comments = ["v5.0.0", "gh-action-pulse: ignore[max-days]"]
+        action = GithubAction(
+            "crazy-max/ghaction-github-labeler",
+            "548a7c3603594ec17c819e1239f281a3b801ab4d",
+            "v5.0.0",
+            comments=original_comments,
+        )
+        action.actual.reference_type = "sha"
+        action.actual.description_type = "tag"
+        mock__get_valid_semver_tags.return_value = []
+
+        def set_recommendation(_tags: list) -> None:
+            action.recommended.reference = "548a7c3603594ec17c819e1239f281a3b801ab4d"
+            action.recommended.description = "v6.0.0"
+
+        mock__set_recommended_for_sha.side_effect = set_recommendation
+
+        action._set_recommended_reference_and_date()
+
+        assert action.actual.comments == ["v5.0.0", "gh-action-pulse: ignore[max-days]"]
+        assert original_comments == ["v5.0.0", "gh-action-pulse: ignore[max-days]"]
+        assert action.recommended.comments == ["v6.0.0", "gh-action-pulse: ignore[max-days]"]
+
+    @patch("gh_action_pulse.actions.GithubAction._get_valid_semver_tags")
+    @patch("gh_action_pulse.actions.GithubAction._set_recommended_for_sha")
+    def test__set_recommended_reference_and_date_inserts_description_before_annotation(
+        self,
+        mock__set_recommended_for_sha: MagicMock,
+        mock__get_valid_semver_tags: MagicMock,
+    ) -> None:
+        """A non-tag first comment is kept and the recommended description is inserted in front."""
+        action = GithubAction(
+            "actions/checkout",
+            "abc123",
+            "gh-action-pulse: ignore[max-days]",
+            comments=["gh-action-pulse: ignore[max-days]"],
+        )
+        action.actual.reference_type = "sha"
+        action.actual.description_type = "bullshit"
+        mock__get_valid_semver_tags.return_value = []
+
+        def set_recommendation(_tags: list) -> None:
+            action.recommended.reference = "def456"
+            action.recommended.description = "v4.2.0"
+
+        mock__set_recommended_for_sha.side_effect = set_recommendation
+
+        action._set_recommended_reference_and_date()
+
+        assert action.actual.comments == ["gh-action-pulse: ignore[max-days]"]
+        assert action.recommended.comments == ["v4.2.0", "gh-action-pulse: ignore[max-days]"]
 
     @pytest.mark.parametrize(
         ("reference_type", "error_message"),
