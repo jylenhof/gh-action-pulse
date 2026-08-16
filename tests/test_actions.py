@@ -54,7 +54,7 @@ class TestGithubAction:
         a1 = GithubAction("repo", "v1", "desc")
         a2 = GithubAction("repo", "v1", "desc")
         a3 = GithubAction("repo", "v2", "desc")
-        a4 = GithubAction("repo", "v1", "desc", comments=["desc", "zizmor: ignore[unpinned-uses]"])
+        a4 = GithubAction("repo", "v1", "desc", comments=["desc", "gh-action-pulse: ignore[max-days]"])
 
         assert a1 == a2
         assert a1 != a3
@@ -188,14 +188,14 @@ class TestGithubAction:
         action = GithubAction("actions/checkout", "abc123", "v4.0.0")
         action.recommended.reference = "def456"
         action.recommended.description = "v4.1.0"
-        action.recommended.comments = ["v4.1.0", "keep this", "zizmor: ignore[unpinned-uses]"]
+        action.recommended.comments = ["v4.1.0", "keep this", "gh-action-pulse: ignore[max-days]"]
 
         assert (
             action.get_updated_uses_replacement(
                 "abc123",
-                ["v4.0.0", "keep this", "zizmor: ignore[unpinned-uses]"],
+                ["v4.0.0", "keep this", "gh-action-pulse: ignore[max-days]"],
             )
-            == "actions/checkout@def456 # v4.1.0 # keep this # zizmor: ignore[unpinned-uses]"
+            == "actions/checkout@def456 # v4.1.0 # keep this # gh-action-pulse: ignore[max-days]"
         )
 
     def test__set_actual_reference_type_and_date_with_tag(self) -> None:
@@ -451,7 +451,7 @@ class TestGithubAction:
         mock__get_valid_semver_tags: MagicMock,
     ) -> None:
         """Updating the version comment must not rewrite the original comments used for lookup."""
-        original_comments = ["v5.0.0", "zizmor: ignore[unpinned-uses]"]
+        original_comments = ["v5.0.0", "gh-action-pulse: ignore[max-days]"]
         action = GithubAction(
             "crazy-max/ghaction-github-labeler",
             "548a7c3603594ec17c819e1239f281a3b801ab4d",
@@ -470,9 +470,9 @@ class TestGithubAction:
 
         action._set_recommended_reference_and_date()
 
-        assert action.actual.comments == ["v5.0.0", "zizmor: ignore[unpinned-uses]"]
-        assert original_comments == ["v5.0.0", "zizmor: ignore[unpinned-uses]"]
-        assert action.recommended.comments == ["v6.0.0", "zizmor: ignore[unpinned-uses]"]
+        assert action.actual.comments == ["v5.0.0", "gh-action-pulse: ignore[max-days]"]
+        assert original_comments == ["v5.0.0", "gh-action-pulse: ignore[max-days]"]
+        assert action.recommended.comments == ["v6.0.0", "gh-action-pulse: ignore[max-days]"]
 
     @patch("gh_action_pulse.actions.GithubAction._get_valid_semver_tags")
     @patch("gh_action_pulse.actions.GithubAction._set_recommended_for_sha")
@@ -485,8 +485,8 @@ class TestGithubAction:
         action = GithubAction(
             "actions/checkout",
             "abc123",
-            "zizmor: ignore[unpinned-uses]",
-            comments=["zizmor: ignore[unpinned-uses]"],
+            "gh-action-pulse: ignore[max-days]",
+            comments=["gh-action-pulse: ignore[max-days]"],
         )
         action.actual.reference_type = "sha"
         action.actual.description_type = "bullshit"
@@ -500,8 +500,8 @@ class TestGithubAction:
 
         action._set_recommended_reference_and_date()
 
-        assert action.actual.comments == ["zizmor: ignore[unpinned-uses]"]
-        assert action.recommended.comments == ["v4.2.0", "zizmor: ignore[unpinned-uses]"]
+        assert action.actual.comments == ["gh-action-pulse: ignore[max-days]"]
+        assert action.recommended.comments == ["v4.2.0", "gh-action-pulse: ignore[max-days]"]
 
     @pytest.mark.parametrize(
         ("reference_type", "error_message"),

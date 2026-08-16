@@ -268,40 +268,42 @@ class TestApplyRecommendedUpdates:
         assert workflow.read_text(encoding="utf-8") == original
 
     def test_updates_table_preserves_brackets_in_comments(self, tmp_path: Path) -> None:
-        """Rich markup must not swallow zizmor annotation brackets in the updates recap."""
+        """Rich markup must not swallow ignore-hint brackets in the updates recap."""
         workflow = tmp_path / "workflow.yml"
-        original = "- uses: actions/checkout@v4 # zizmor: ignore[unpinned-uses]\n"
+        original = "- uses: actions/checkout@v4 # gh-action-pulse: ignore[max-days]\n"
         workflow.write_text(original, encoding="utf-8")
 
         action = GithubAction(
             "actions/checkout",
             "v4",
-            "zizmor: ignore[unpinned-uses]",
-            comments=["zizmor: ignore[unpinned-uses]"],
+            "gh-action-pulse: ignore[max-days]",
+            comments=["gh-action-pulse: ignore[max-days]"],
         )
         action.recommended.reference = "abc123"
         action.recommended.description = "v4.2.0"
-        action.recommended.comments = ["v4.2.0", "zizmor: ignore[unpinned-uses]"]
+        action.recommended.comments = ["v4.2.0", "gh-action-pulse: ignore[max-days]"]
         uniq = UniqGithubActions()
         uniq.add(action)
 
         with console.capture() as capture:
             apply_recommended_updates({workflow: [{1: original.rstrip("\n")}]}, uniq, dry_run=True)
 
-        assert "ignore[unpinned-uses]" in capture.get()
+        assert "ignore[max-days]" in capture.get()
 
-    def test_updates_version_comment_while_preserving_zizmor_annotation(self, tmp_path: Path) -> None:
+    def test_updates_version_comment_while_preserving_ignore_hint(self, tmp_path: Path) -> None:
         """SHA-pinned actions keep extra comments when only the version comment changes."""
         workflow = tmp_path / "workflow.yml"
         sha = "548a7c3603594ec17c819e1239f281a3b801ab4d"
-        original = f"        uses: crazy-max/ghaction-github-labeler@{sha} # v5.0.0 # zizmor: ignore[unpinned-uses]\n"
+        original = (
+            f"        uses: crazy-max/ghaction-github-labeler@{sha} # v5.0.0 # gh-action-pulse: ignore[max-days]\n"
+        )
         workflow.write_text(original, encoding="utf-8")
 
         action = GithubAction(
             "crazy-max/ghaction-github-labeler",
             sha,
             "v5.0.0",
-            comments=["v5.0.0", "zizmor: ignore[unpinned-uses]"],
+            comments=["v5.0.0", "gh-action-pulse: ignore[max-days]"],
         )
         action.actual.reference_type = "sha"
         action.actual.description_type = "tag"
@@ -326,27 +328,27 @@ class TestApplyRecommendedUpdates:
 
         assert (
             workflow.read_text(encoding="utf-8")
-            == f"        uses: crazy-max/ghaction-github-labeler@{sha} # v6.0.0 # zizmor: ignore[unpinned-uses]\n"
+            == f"        uses: crazy-max/ghaction-github-labeler@{sha} # v6.0.0 # gh-action-pulse: ignore[max-days]\n"
         )
 
     def test_preserves_distinct_extra_comments_for_the_same_pin(self, tmp_path: Path) -> None:
         """Two uses lines with the same pin keep their own extra comments after an update."""
         workflow = tmp_path / "workflow.yml"
         original = (
-            "- uses: actions/checkout@abc123 # v4.2.0 # zizmor: ignore[unpinned-uses]\n"
+            "- uses: actions/checkout@abc123 # v4.2.0 # gh-action-pulse: ignore[max-days]\n"
             "- uses: actions/checkout@abc123 # v4.2.0 # keep me\n"
         )
         workflow.write_text(original, encoding="utf-8")
 
-        zizmor_action = GithubAction(
+        ignore_action = GithubAction(
             "actions/checkout",
             "abc123",
             "v4.2.0",
-            comments=["v4.2.0", "zizmor: ignore[unpinned-uses]"],
+            comments=["v4.2.0", "gh-action-pulse: ignore[max-days]"],
         )
-        zizmor_action.recommended.reference = "def456"
-        zizmor_action.recommended.description = "v4.3.0"
-        zizmor_action.recommended.comments = ["v4.3.0", "zizmor: ignore[unpinned-uses]"]
+        ignore_action.recommended.reference = "def456"
+        ignore_action.recommended.description = "v4.3.0"
+        ignore_action.recommended.comments = ["v4.3.0", "gh-action-pulse: ignore[max-days]"]
         note_action = GithubAction(
             "actions/checkout",
             "abc123",
@@ -357,7 +359,7 @@ class TestApplyRecommendedUpdates:
         note_action.recommended.description = "v4.3.0"
         note_action.recommended.comments = ["v4.3.0", "keep me"]
         uniq = UniqGithubActions()
-        uniq.add(zizmor_action)
+        uniq.add(ignore_action)
         uniq.add(note_action)
 
         apply_recommended_updates(
@@ -372,7 +374,7 @@ class TestApplyRecommendedUpdates:
         )
 
         assert workflow.read_text(encoding="utf-8") == (
-            "- uses: actions/checkout@def456 # v4.3.0 # zizmor: ignore[unpinned-uses]\n"
+            "- uses: actions/checkout@def456 # v4.3.0 # gh-action-pulse: ignore[max-days]\n"
             "- uses: actions/checkout@def456 # v4.3.0 # keep me\n"
         )
 

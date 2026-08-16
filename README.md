@@ -12,7 +12,7 @@ It is aimed at repositories that want to keep GitHub Actions dependencies unders
 - **Repository redirect handling**: Rewrites moved repositories to their canonical name when GitHub reports a redirect.
 - **Freshness checks**: Warns or fails when the newest eligible SemVer tag is older than your configured threshold.
 - **Node.js runtime check**: Recursively verifies that actions, including composite and local composite dependencies, run on at least a configurable minimum Node.js version (`--minimum-nodejs-version`, default `24`), failing with a dedicated exit code (`3`) when an outdated runtime is detected.
-- **Comment preservation**: Keeps extra trailing comments on `uses:` lines (for example [zizmor](https://github.com/zizmorcore/zizmor) annotations) when rewriting references.
+- **Comment preservation**: Keeps extra trailing comments on `uses:` lines (for example `gh-action-pulse: ignore[max-days]`) when rewriting references.
 
 ## How It Works
 
@@ -29,7 +29,7 @@ In practice, this means the tool can:
 
 - convert branch or tag references into pinned SHAs annotated with the matching tag,
 - preserve branch intent when no suitable tag exists,
-- keep extra trailing comments such as zizmor annotations,
+- keep extra trailing comments such as ignore hints,
 - surface stale upstream action releases with a non-zero exit code.
 
 ## Example

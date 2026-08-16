@@ -39,7 +39,7 @@ action@sha # bullshit
 action@bullshit
 => full exit error on this one !
 
-Extra `#` comments after the first trailing comment (for example `zizmor: ignore[unpinned-uses]`)
+Extra `#` comments after the first trailing comment (for example `gh-action-pulse: ignore[max-days]`)
 are preserved when rewriting a `uses:` line. If the first comment is a tag or branch, it is
 updated to the recommended description; otherwise the recommended description is inserted
 in front of the existing comments.

@@ -25,20 +25,20 @@ class TestUsesLineHelpers:
         """Trailing comments are split on `#`; the first fragment is the description."""
         assert parse_trailing_comments(None) == (None, [])
         assert parse_trailing_comments("v4.2.2") == ("v4.2.2", ["v4.2.2"])
-        assert parse_trailing_comments("v4.2.2 # zizmor: ignore[unpinned-uses]") == (
+        assert parse_trailing_comments("v4.2.2 # gh-action-pulse: ignore[max-days]") == (
             "v4.2.2",
-            ["v4.2.2", "zizmor: ignore[unpinned-uses]"],
+            ["v4.2.2", "gh-action-pulse: ignore[max-days]"],
         )
 
     def test_matches_uses_line_with_multiple_comments(self) -> None:
         """Named groups capture the action, reference, and raw trailing comments."""
         match = USES_LINE_PATTERN.search(
-            "        uses: actions/checkout@abc123 # v4.2.2 # zizmor: ignore[unpinned-uses]"
+            "        uses: actions/checkout@abc123 # v4.2.2 # gh-action-pulse: ignore[max-days]"
         )
         assert match is not None
         assert match.group("name") == "actions/checkout"
         assert match.group("reference") == "abc123"
-        assert match.group("comments") == "v4.2.2 # zizmor: ignore[unpinned-uses]"
+        assert match.group("comments") == "v4.2.2 # gh-action-pulse: ignore[max-days]"
 
     def test_skips_local_action_without_reference(self) -> None:
         """Local `./` actions without `@` are not uses-line matches."""

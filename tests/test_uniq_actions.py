@@ -85,8 +85,8 @@ class TestUniqGithubActions:
         full_list = {
             Path("test.yml"): [
                 {1: "uses: actions/checkout@abc123 # v4.2.2 # extra note"},
-                {2: ("uses: actions/setup-python@def456 # v5.0.0 # zizmor: ignore[unpinned-uses]")},
-                {3: "uses: actions/cache@ghi789 # zizmor: ignore[unpinned-uses]"},
+                {2: ("uses: actions/setup-python@def456 # v5.0.0 # gh-action-pulse: ignore[max-days]")},
+                {3: "uses: actions/cache@ghi789 # gh-action-pulse: ignore[max-days]"},
             ]
         }
         uniq = UniqGithubActions()
@@ -97,10 +97,10 @@ class TestUniqGithubActions:
         assert checkout.actual.comments == ["v4.2.2", "extra note"]
         setup_python = uniq.get_item("actions/setup-python", "def456", "v5.0.0")
         assert setup_python.actual.description == "v5.0.0"
-        assert setup_python.actual.comments == ["v5.0.0", "zizmor: ignore[unpinned-uses]"]
-        cache = uniq.get_item("actions/cache", "ghi789", "zizmor: ignore[unpinned-uses]")
-        assert cache.actual.description == "zizmor: ignore[unpinned-uses]"
-        assert cache.actual.comments == ["zizmor: ignore[unpinned-uses]"]
+        assert setup_python.actual.comments == ["v5.0.0", "gh-action-pulse: ignore[max-days]"]
+        cache = uniq.get_item("actions/cache", "ghi789", "gh-action-pulse: ignore[max-days]")
+        assert cache.actual.description == "gh-action-pulse: ignore[max-days]"
+        assert cache.actual.comments == ["gh-action-pulse: ignore[max-days]"]
 
     def test_init_from_full_list_with_mixed_content(self) -> None:
         """Verify that valid actions are parsed and invalid ones (like local actions) are skipped."""
@@ -201,13 +201,13 @@ class TestUniqGithubActions:
         """Actions that share a pin but differ in extra comments must not be confused."""
         uniq_actions = UniqGithubActions()
         shared = ("actions/checkout", "abc123", "v4.2.0")
-        with_zizmor = GithubAction(*shared, comments=["v4.2.0", "zizmor: ignore[unpinned-uses]"])
+        with_ignore = GithubAction(*shared, comments=["v4.2.0", "gh-action-pulse: ignore[max-days]"])
         with_note = GithubAction(*shared, comments=["v4.2.0", "keep me"])
-        uniq_actions.add(with_zizmor)
+        uniq_actions.add(with_ignore)
         uniq_actions.add(with_note)
 
-        assert uniq_actions.get_item(*shared) in {with_zizmor, with_note}
-        assert uniq_actions.get_item(*shared, comments=["v4.2.0", "zizmor: ignore[unpinned-uses]"]) is with_zizmor
+        assert uniq_actions.get_item(*shared) in {with_ignore, with_note}
+        assert uniq_actions.get_item(*shared, comments=["v4.2.0", "gh-action-pulse: ignore[max-days]"]) is with_ignore
         assert uniq_actions.get_item(*shared, comments=["v4.2.0", "keep me"]) is with_note
         with pytest.raises(GithubActionNotFoundError):
             uniq_actions.get_item(*shared, comments=["v4.2.0"])
