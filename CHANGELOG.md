@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.2.0](https://github.com/jylenhof/gh-action-pulse/compare/v1.1.0...v1.2.0) (2026-08-16)
+
+
+### Features
+
+* preserve extra trailing comments on uses lines ([#153](https://github.com/jylenhof/gh-action-pulse/issues/153)) ([2562dd6](https://github.com/jylenhof/gh-action-pulse/commit/2562dd6531bf33b1e8886d297556aa33c735b75c))
+
+
+### Bug Fixes
+
+* prefer SemVer tag comments when a branch tip matches the tag ([63be62d](https://github.com/jylenhof/gh-action-pulse/commit/63be62dffefd38c8a244660be03a21b5a2be7c5e))
+* Prefer tag annotation when a branch tip matches a SemVer tag ([#156](https://github.com/jylenhof/gh-action-pulse/issues/156)) ([63be62d](https://github.com/jylenhof/gh-action-pulse/commit/63be62dffefd38c8a244660be03a21b5a2be7c5e))
+
 ## [1.1.0](https://github.com/jylenhof/gh-action-pulse/compare/v1.0.0...v1.1.0) (2026-08-01)
 
 
