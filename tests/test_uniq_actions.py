@@ -22,7 +22,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from gh_action_pulse.actions import GithubAction, GithubActionNotFoundError
-from gh_action_pulse.uniq_actions import UniqGithubActions, parse_trailing_comments
+from gh_action_pulse.uniq_actions import UniqGithubActions
 
 
 class TestUniqGithubActions:
@@ -101,15 +101,6 @@ class TestUniqGithubActions:
         cache = uniq.get_item("actions/cache", "ghi789", "zizmor: ignore[unpinned-uses]")
         assert cache.actual.description == "zizmor: ignore[unpinned-uses]"
         assert cache.actual.comments == ["zizmor: ignore[unpinned-uses]"]
-
-    def test_parse_trailing_comments(self) -> None:
-        """Trailing comments are split on `#`; the first fragment is the description."""
-        assert parse_trailing_comments(None) == (None, [])
-        assert parse_trailing_comments("v4.2.2") == ("v4.2.2", ["v4.2.2"])
-        assert parse_trailing_comments("v4.2.2 # zizmor: ignore[unpinned-uses]") == (
-            "v4.2.2",
-            ["v4.2.2", "zizmor: ignore[unpinned-uses]"],
-        )
 
     def test_init_from_full_list_with_mixed_content(self) -> None:
         """Verify that valid actions are parsed and invalid ones (like local actions) are skipped."""

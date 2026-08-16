@@ -47,12 +47,13 @@ from gh_action_pulse.helpers.constants import (
     STALE_TAG_ERROR_EXIT_CODE,
 )
 from gh_action_pulse.helpers.github import get_github_token
+from gh_action_pulse.helpers.uses_line import USES_LINE_PATTERN, parse_trailing_comments
 from gh_action_pulse.nodejs_version import (
     NodeVersionChecker,
     NodeVersionViolation,
     report_node_version_violations,
 )
-from gh_action_pulse.uniq_actions import USES_LINE_PATTERN, UniqGithubActions, parse_trailing_comments
+from gh_action_pulse.uniq_actions import UniqGithubActions
 
 logger = logging.getLogger(__name__)
 app = typer.Typer()

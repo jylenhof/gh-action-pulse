@@ -16,7 +16,6 @@
 """Defines the UniqGithubActions collection for deduplicated action references."""
 
 import logging
-import re
 import time
 from typing import TYPE_CHECKING
 
@@ -24,22 +23,9 @@ from rich.progress import BarColumn, Progress, SpinnerColumn, TaskProgressColumn
 
 from gh_action_pulse.actions import GithubAction, GithubActionNotFoundError
 from gh_action_pulse.helpers.console import console, phase_status
+from gh_action_pulse.helpers.uses_line import USES_LINE_PATTERN, parse_trailing_comments
 
 logger = logging.getLogger(__name__)
-
-USES_LINE_PATTERN = re.compile(
-    r"^\s*[-]?\s{0,1}uses:\s*"
-    r"(?P<name>[^@\s]+)@"
-    r"(?P<reference>[^\s#]+)"
-    r"(?:\s+#\s+(?P<comments>.+))?"
-)
-
-
-def parse_trailing_comments(raw_comments: str | None) -> tuple[str | None, list[str]]:
-    """Split trailing `#` comments; the first one is the action description."""
-    comments = [part.strip() for part in raw_comments.split("#")] if raw_comments else []
-    description = comments[0] if comments else None
-    return description, comments
 
 
 if TYPE_CHECKING:
