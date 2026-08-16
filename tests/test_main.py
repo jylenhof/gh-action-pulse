@@ -26,6 +26,7 @@ import typer
 from typer.testing import CliRunner
 
 from gh_action_pulse.actions import GithubAction, GithubActionArchivedError
+from gh_action_pulse.helpers.console import console
 from gh_action_pulse.helpers.constants import (
     ARCHIVED_ACTION_ERROR_EXIT_CODE,
     GITHUB_TOKEN_ERROR_EXIT_CODE,
@@ -178,6 +179,7 @@ class TestApplyRecommendedUpdates:
         action = GithubAction("actions/checkout", "v4")
         action.recommended.reference = "abc123"
         action.recommended.description = "v4.2.0"
+        action.recommended.comments = ["v4.2.0"]
         uniq = UniqGithubActions()
         uniq.add(action)
 
@@ -194,6 +196,7 @@ class TestApplyRecommendedUpdates:
         action = GithubAction("actions/checkout", "v4")
         action.recommended.reference = "abc123"
         action.recommended.description = "v4.2.0"
+        action.recommended.comments = ["v4.2.0"]
         uniq = UniqGithubActions()
         uniq.add(action)
 
@@ -224,9 +227,10 @@ class TestApplyRecommendedUpdates:
         original = "- uses: actions/checkout@abc123 # v4.2.0\n"
         workflow.write_text(original, encoding="utf-8")
 
-        action = GithubAction("actions/checkout", "abc123", "v4.2.0")
+        action = GithubAction("actions/checkout", "abc123", "v4.2.0", comments=["v4.2.0"])
         action.recommended.reference = "abc123"
         action.recommended.description = "v4.2.0"
+        action.recommended.comments = ["v4.2.0"]
         uniq = UniqGithubActions()
         uniq.add(action)
 
@@ -248,6 +252,7 @@ class TestApplyRecommendedUpdates:
         action = GithubAction("actions/checkout", "v4")
         action.recommended.reference = "abc123"
         action.recommended.description = "v4.2.0"
+        action.recommended.comments = ["v4.2.0"]
         uniq = UniqGithubActions()
         uniq.add(action)
 
@@ -261,6 +266,115 @@ class TestApplyRecommendedUpdates:
         assert "from:" in caplog.text
         assert "to:" in caplog.text
         assert workflow.read_text(encoding="utf-8") == original
+
+    def test_updates_table_preserves_brackets_in_comments(self, tmp_path: Path) -> None:
+        """Rich markup must not swallow zizmor annotation brackets in the updates recap."""
+        workflow = tmp_path / "workflow.yml"
+        original = "- uses: actions/checkout@v4 # zizmor: ignore[unpinned-uses]\n"
+        workflow.write_text(original, encoding="utf-8")
+
+        action = GithubAction(
+            "actions/checkout",
+            "v4",
+            "zizmor: ignore[unpinned-uses]",
+            comments=["zizmor: ignore[unpinned-uses]"],
+        )
+        action.recommended.reference = "abc123"
+        action.recommended.description = "v4.2.0"
+        action.recommended.comments = ["v4.2.0", "zizmor: ignore[unpinned-uses]"]
+        uniq = UniqGithubActions()
+        uniq.add(action)
+
+        with console.capture() as capture:
+            apply_recommended_updates({workflow: [{1: original.rstrip("\n")}]}, uniq, dry_run=True)
+
+        assert "ignore[unpinned-uses]" in capture.get()
+
+    def test_updates_version_comment_while_preserving_zizmor_annotation(self, tmp_path: Path) -> None:
+        """SHA-pinned actions keep extra comments when only the version comment changes."""
+        workflow = tmp_path / "workflow.yml"
+        sha = "548a7c3603594ec17c819e1239f281a3b801ab4d"
+        original = f"        uses: crazy-max/ghaction-github-labeler@{sha} # v5.0.0 # zizmor: ignore[unpinned-uses]\n"
+        workflow.write_text(original, encoding="utf-8")
+
+        action = GithubAction(
+            "crazy-max/ghaction-github-labeler",
+            sha,
+            "v5.0.0",
+            comments=["v5.0.0", "zizmor: ignore[unpinned-uses]"],
+        )
+        action.actual.reference_type = "sha"
+        action.actual.description_type = "tag"
+        action.recommended.reference = sha
+        action.recommended.description = "v6.0.0"
+        with (
+            patch("gh_action_pulse.actions.GithubAction._get_valid_semver_tags", return_value=[]),
+            patch("gh_action_pulse.actions.GithubAction._set_recommended_for_sha") as mock_set_sha,
+        ):
+
+            def set_recommendation(_tags: list) -> None:
+                action.recommended.reference = sha
+                action.recommended.description = "v6.0.0"
+
+            mock_set_sha.side_effect = set_recommendation
+            action._set_recommended_reference_and_date()
+
+        uniq = UniqGithubActions()
+        uniq.add(action)
+
+        apply_recommended_updates({workflow: [{1: original.rstrip("\n")}]}, uniq, dry_run=False)
+
+        assert (
+            workflow.read_text(encoding="utf-8")
+            == f"        uses: crazy-max/ghaction-github-labeler@{sha} # v6.0.0 # zizmor: ignore[unpinned-uses]\n"
+        )
+
+    def test_preserves_distinct_extra_comments_for_the_same_pin(self, tmp_path: Path) -> None:
+        """Two uses lines with the same pin keep their own extra comments after an update."""
+        workflow = tmp_path / "workflow.yml"
+        original = (
+            "- uses: actions/checkout@abc123 # v4.2.0 # zizmor: ignore[unpinned-uses]\n"
+            "- uses: actions/checkout@abc123 # v4.2.0 # keep me\n"
+        )
+        workflow.write_text(original, encoding="utf-8")
+
+        zizmor_action = GithubAction(
+            "actions/checkout",
+            "abc123",
+            "v4.2.0",
+            comments=["v4.2.0", "zizmor: ignore[unpinned-uses]"],
+        )
+        zizmor_action.recommended.reference = "def456"
+        zizmor_action.recommended.description = "v4.3.0"
+        zizmor_action.recommended.comments = ["v4.3.0", "zizmor: ignore[unpinned-uses]"]
+        note_action = GithubAction(
+            "actions/checkout",
+            "abc123",
+            "v4.2.0",
+            comments=["v4.2.0", "keep me"],
+        )
+        note_action.recommended.reference = "def456"
+        note_action.recommended.description = "v4.3.0"
+        note_action.recommended.comments = ["v4.3.0", "keep me"]
+        uniq = UniqGithubActions()
+        uniq.add(zizmor_action)
+        uniq.add(note_action)
+
+        apply_recommended_updates(
+            {
+                workflow: [
+                    {1: original.splitlines()[0]},
+                    {2: original.splitlines()[1]},
+                ]
+            },
+            uniq,
+            dry_run=False,
+        )
+
+        assert workflow.read_text(encoding="utf-8") == (
+            "- uses: actions/checkout@def456 # v4.3.0 # zizmor: ignore[unpinned-uses]\n"
+            "- uses: actions/checkout@def456 # v4.3.0 # keep me\n"
+        )
 
     def test_ignores_lines_that_do_not_match_uses_pattern(self, tmp_path: Path) -> None:
         """Non-matching scanned lines are left untouched."""

@@ -29,6 +29,7 @@ from github import Auth, Github
 from rich.logging import RichHandler
 from rich.panel import Panel
 from rich.table import Table
+from rich.text import Text
 
 from gh_action_pulse import __version__
 from gh_action_pulse.actions import GithubAction, GithubActionArchivedError
@@ -51,7 +52,7 @@ from gh_action_pulse.nodejs_version import (
     NodeVersionViolation,
     report_node_version_violations,
 )
-from gh_action_pulse.uniq_actions import UniqGithubActions
+from gh_action_pulse.uniq_actions import USES_LINE_PATTERN, UniqGithubActions, parse_trailing_comments
 
 logger = logging.getLogger(__name__)
 app = typer.Typer()
@@ -196,7 +197,6 @@ def apply_recommended_updates(
     dry_run: bool,
 ) -> UpdateResult:
     """Rewrite scanned files with recommended action references (unless in dry-run mode)."""
-    action_pattern: re.Pattern[str] = re.compile(r"^\s*[-]?\s{0,1}uses:\s*([^@\s]+)@([^\s#]+)(?:\s+#\s+(.+))?")
     result = UpdateResult()
     started = time.perf_counter()
     for file, actions_list in results.items():
@@ -207,18 +207,26 @@ def apply_recommended_updates(
         file_changed = False
         for action_with_line in actions_list:
             for line_number, full_line in action_with_line.items():
-                if match := action_pattern.search(full_line):
-                    name: str = match.group(1)
-                    actual_reference: str = match.group(2)
-                    actual_description: str | None = match.group(3) if match.group(3) is not None else None
-                    uniq_action = uniq_github_actions.get_item(name, actual_reference, actual_description)
-                    if replacement := uniq_action.get_updated_uses_replacement(actual_reference, actual_description):
+                if match := USES_LINE_PATTERN.search(full_line):
+                    name: str = match.group("name")
+                    actual_reference: str = match.group("reference")
+                    actual_description, actual_comments = parse_trailing_comments(match.group("comments"))
+                    uniq_action = uniq_github_actions.get_item(
+                        name, actual_reference, actual_description, actual_comments
+                    )
+                    if replacement := uniq_action.get_updated_uses_replacement(
+                        actual_reference=actual_reference,
+                        actual_comments=actual_comments,
+                    ):
                         old_line = file_lines[line_number - 1]
                         logger.debug("Changing line number: %s", line_number)
                         logger.debug("from:\n%s", old_line)
                         file_lines[line_number - 1] = re.sub(
-                            pattern=r"^(\s*[-]?\s{0,1}uses:\s*)(?:[^@\s]+)@[^\s#]+(?:\s+#\s+.+)?",
-                            repl=r"\1" + replacement,
+                            pattern=(
+                                r"^(?P<prefix>\s*[-]?\s{0,1}uses:\s*)"
+                                r"(?:[^@\s]+)@[^\s#]+(?:\s+#\s+.+)?"
+                            ),
+                            repl=r"\g<prefix>" + replacement,
                             string=file_lines[line_number - 1],
                         )
                         new_line = file_lines[line_number - 1]
@@ -266,7 +274,7 @@ def _print_updates_table(result: UpdateResult, *, dry_run: bool, elapsed: float 
         table.add_row(
             str(replacement.file),
             str(replacement.line_number),
-            _format_uses_change(replacement.old, replacement.new),
+            Text(_format_uses_change(replacement.old, replacement.new)),
         )
     console.print(Panel(table, border_style=style))
 
