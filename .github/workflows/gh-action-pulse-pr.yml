@@ -2,6 +2,9 @@
 name: gh-action-pulse PR
 
 on:
+  schedule:
+    # Wednesday 12:00 Europe/Paris. GitHub cron is UTC-only: 10:00 UTC during CEST, 11:00 UTC during CET.
+    - cron: '0 10 * * 3'
   workflow_dispatch:
 
 concurrency:
