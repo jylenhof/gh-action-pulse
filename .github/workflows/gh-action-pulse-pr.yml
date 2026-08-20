@@ -4,6 +4,10 @@ name: gh-action-pulse PR
 on:
   workflow_dispatch:
 
+concurrency:
+  group: gh-action-pulse-pr
+  cancel-in-progress: false
+
 permissions:
   contents: read
 
@@ -31,6 +35,9 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          # Pulse the default branch even when this workflow is dispatched from
+          # another ref (for example, to test the workflow file on a PR branch).
+          ref: ${{ github.event.repository.default_branch }}
 
       - name: Generate GitHub token
         uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
@@ -86,6 +93,7 @@ jobs:
           token: ${{ steps.generate-token.outputs.token }}
           commit-message: "chore: update GitHub Actions references"
           branch: chore/gh-action-pulse
+          base: ${{ github.event.repository.default_branch }}
           title: "chore: update GitHub Actions references"
           body: |
             Automated GitHub Actions reference updates from `gh-action-pulse`.
