@@ -100,6 +100,8 @@ jobs:
           title: "chore: update GitHub Actions references"
           body: |
             Automated GitHub Actions reference updates from `gh-action-pulse`.
+          assignees: jylenhof
+          reviewers: jylenhof
           sign-commits: true
           delete-branch: true
 
