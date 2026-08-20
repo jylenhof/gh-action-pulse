@@ -46,16 +46,29 @@ jobs:
           cache: false
           version: ${{ vars.MISE_VERSION }}
 
-      - name: Verify gh-action-pulse is applied
+      - name: Run gh-action-pulse
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_ACTION_PULSE_LOG_LEVEL: ${{ runner.debug == '1' && 'DEBUG' || 'INFO' }}
+          GH_ACTION_PULSE_FROM_SOURCE: ${{ github.event.repository.name == 'gh-action-pulse' }}
         run: |-
+          set +e
+          if [ "$GH_ACTION_PULSE_FROM_SOURCE" = "true" ]; then
+            pulse=(uv run --frozen --no-dev gh-action-pulse)
+          else
+            pulse=(gh-action-pulse)
+          fi
           # download-artifact last tag is 150 days... so move up limit
-          uv run --frozen --no-dev gh-action-pulse --max-age 200
-          if ! git diff --quiet; then
-            echo "::error::gh-action-pulse updates are not applied."
-            echo "Run 'uv run gh-action-pulse' locally and commit the changes."
-            git diff
-            exit 1
+          "${pulse[@]}" --dry-run --max-age 200
+          status=$?
+          if [ "$status" -ne 0 ]; then
+            case "$status" in
+              2) reason="GitHub authentication failed (GITHUB_TOKEN could not be resolved)" ;;
+              3) reason="a Node.js runtime below the minimum version was detected" ;;
+              4) reason="a referenced upstream action repository is archived" ;;
+              5) reason="an action tag is older than --max-age" ;;
+              *) reason="unexpected failure" ;;
+            esac
+            echo "::error::gh-action-pulse failed with exit code ${status}: ${reason}."
+            exit "$status"
           fi
