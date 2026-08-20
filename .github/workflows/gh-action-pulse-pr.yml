@@ -1,0 +1,112 @@
+---
+name: gh-action-pulse PR
+
+on:
+  schedule:
+    # Wednesday 12:00 Europe/Paris. GitHub cron is UTC-only: 10:00 UTC during CEST, 11:00 UTC during CET.
+    - cron: '0 10 * * 3'
+  workflow_dispatch:
+
+concurrency:
+  group: gh-action-pulse-pr
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  gh-action-pulse-pr:
+    name: gh-action-pulse PR
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      UV_LINK_MODE: copy
+    permissions:
+      contents: read
+    steps:
+      - name: "Cleaning up"
+        uses: gacts/run-and-post-run@598d7a875d5620e0457490555b5e18e46082aa47 # v1.4.4
+        with:
+          run: |
+            echo "Pre-Check Cleanup"
+            echo "~/.local" | xargs rm -rf
+          post: |
+            echo "Post-Check Cleanup"
+            echo "~/.local" | xargs rm -rf
+
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          # Pulse the default branch even when this workflow is dispatched from
+          # another ref (for example, to test the workflow file on a PR branch).
+          ref: ${{ github.event.repository.default_branch }}
+
+      - name: Generate GitHub token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        id: generate-token
+        with:
+          client-id: ${{ secrets.CLIENT_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+          permission-contents: write
+          permission-pull-requests: write
+          permission-workflows: write
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up mise
+        uses: jdx/mise-action@3c2e0cf82a5b2e5249f0d3635a4d83d0ae861518 # v4.2.5
+        env:
+          MISE_INSTALL_FROM_GITHUB: 1
+        with:
+          cache: false
+          version: ${{ vars.MISE_VERSION }}
+
+      - name: Run gh-action-pulse
+        id: pulse
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_ACTION_PULSE_LOG_LEVEL: ${{ runner.debug == '1' && 'DEBUG' || 'INFO' }}
+          GH_ACTION_PULSE_FROM_SOURCE: ${{ github.event.repository.name == 'gh-action-pulse' }}
+        run: |-
+          set +e
+          if [ "$GH_ACTION_PULSE_FROM_SOURCE" = "true" ]; then
+            pulse=(uv run --frozen --no-dev gh-action-pulse)
+          else
+            pulse=(gh-action-pulse)
+          fi
+          # download-artifact last tag is 150 days... so move up limit
+          "${pulse[@]}" --max-age 200
+          status=$?
+          echo "exit-code=${status}" >> "$GITHUB_OUTPUT"
+          if [ "$status" -ne 0 ]; then
+            case "$status" in
+              2) reason="GitHub authentication failed (GITHUB_TOKEN could not be resolved)" ;;
+              3) reason="a Node.js runtime below the minimum version was detected" ;;
+              4) reason="a referenced upstream action repository is archived" ;;
+              5) reason="an action tag is older than --max-age" ;;
+              *) reason="unexpected failure" ;;
+            esac
+            echo "::error::gh-action-pulse failed with exit code ${status}: ${reason}."
+          fi
+
+      - name: Create pull request
+        uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8.1.1
+        with:
+          token: ${{ steps.generate-token.outputs.token }}
+          commit-message: "chore: update GitHub Actions references"
+          branch: chore/gh-action-pulse
+          base: ${{ github.event.repository.default_branch }}
+          title: "chore: update GitHub Actions references"
+          body: |
+            Automated GitHub Actions reference updates from `gh-action-pulse`.
+          assignees: jylenhof
+          reviewers: jylenhof
+          sign-commits: true
+          delete-branch: true
+
+      - name: Fail on gh-action-pulse errors
+        if: steps.pulse.outputs.exit-code != '0'
+        env:
+          PULSE_EXIT_CODE: ${{ steps.pulse.outputs.exit-code }}
+        run: exit "$PULSE_EXIT_CODE"
