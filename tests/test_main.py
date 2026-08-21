@@ -35,10 +35,14 @@ from gh_action_pulse.helpers.constants import (
     STALE_TAG_ERROR_EXIT_CODE,
 )
 from gh_action_pulse.main import (
+    IgnoredCheck,
     UpdateResult,
+    _print_summary,
     app,
     apply_recommended_updates,
     check_node_versions,
+    collect_ignored_checks,
+    report_ignored_checks,
     validate_max_age,
     validate_max_age_cli,
     validate_min_age,
@@ -154,7 +158,9 @@ class TestCheckNodeVersions:
         mock_checker.check_actions.return_value = [violation]
         mock_checker_cls.return_value = mock_checker
         uniq = MagicMock()
-        actions = {MagicMock()}
+        action = MagicMock()
+        action.ignores.return_value = False
+        actions = {action}
         uniq.get_actions.return_value = actions
 
         result = check_node_versions(MagicMock(), uniq, 24)
@@ -164,7 +170,32 @@ class TestCheckNodeVersions:
         mock_checker.check_actions.assert_called_once_with(actions)
         mock_report.assert_called_once()
         assert mock_report.call_args.args == ([violation], 24)
+        assert mock_report.call_args.kwargs["ignored_count"] == 0
         assert "elapsed" in mock_report.call_args.kwargs
+
+    @patch("gh_action_pulse.main.report_node_version_violations")
+    @patch("gh_action_pulse.main.NodeVersionChecker")
+    def test_counts_nodejs_ignore_hints(
+        self,
+        mock_checker_cls: MagicMock,
+        mock_report: MagicMock,
+    ) -> None:
+        """Actions with a nodejs-version ignore hint are counted in the phase status."""
+        mock_checker = MagicMock()
+        mock_checker.check_actions.return_value = []
+        mock_checker_cls.return_value = mock_checker
+        ignored = GithubAction(
+            "actions/old",
+            "v1",
+            comments=["v1", "gh-action-pulse: ignore[nodejs-version]"],
+        )
+        uniq = MagicMock()
+        uniq.get_actions.return_value = {ignored}
+
+        result = check_node_versions(MagicMock(), uniq, 24)
+
+        assert not result
+        assert mock_report.call_args.kwargs["ignored_count"] == 1
 
 
 class TestApplyRecommendedUpdates:
@@ -423,6 +454,121 @@ class TestWarnAboutStaleActions:
             warn_about_stale_actions([action], 150)
 
         assert caplog.text == ""
+
+    def test_mentions_ignored_count_when_fresh(self) -> None:
+        """The freshness phase reports how many max-age checks were skipped."""
+        with console.capture() as capture:
+            warn_about_stale_actions([], 150, ignored_count=2)
+
+        assert "OK (2 ignored)" in capture.get()
+
+    def test_mentions_ignored_count_when_stale(self) -> None:
+        """Stale results still mention how many max-age checks were skipped."""
+        action = GithubAction("actions/example", "v1")
+        action.has_semver_tags = True
+        action.min_age_tag_date = datetime.datetime.now(datetime.UTC) - datetime.timedelta(days=200)
+
+        with console.capture() as capture:
+            warn_about_stale_actions([action], 150, ignored_count=1)
+
+        assert "1 stale (1 ignored)" in capture.get()
+
+
+class TestIgnoredChecks:
+    """Unit tests for inline ignore-hint collection and reporting."""
+
+    def test_collects_enabled_checks_and_unknown_ids(self, caplog: pytest.LogCaptureFixture) -> None:
+        """Known ignores are collected only when that check is enabled; unknown ids always are."""
+        ignored = GithubAction(
+            "actions/old",
+            "v1",
+            "v1",
+            comments=["v1", 'gh-action-pulse: ignore["max-age", "nodejs-version"]'],
+        )
+        unknown = GithubAction(
+            "actions/cache",
+            "v4",
+            comments=["gh-action-pulse: ignore[max-days]"],
+        )
+        plain = GithubAction("actions/checkout", "v4")
+
+        with caplog.at_level(logging.WARNING):
+            result = collect_ignored_checks(
+                [plain, ignored, unknown],
+                max_age_enabled=True,
+                min_age_enabled=False,
+                nodejs_enabled=False,
+            )
+
+        assert result == [
+            IgnoredCheck(
+                "actions/cache",
+                "max-days",
+                "unknown check id (allowed: max-age, min-age, nodejs-version)",
+            ),
+            IgnoredCheck("actions/old", "max-age", "hint on uses: line"),
+        ]
+        assert "Unknown ignore check 'max-days' on action 'actions/cache'" in caplog.text
+
+    def test_collects_nodejs_ignore_when_enabled(self) -> None:
+        """A nodejs-version hint is recorded only when that check is enabled."""
+        action = GithubAction(
+            "actions/old",
+            "v1",
+            comments=["v1", "gh-action-pulse: ignore[nodejs-version]"],
+        )
+
+        skipped = collect_ignored_checks([action], max_age_enabled=False, min_age_enabled=False, nodejs_enabled=True)
+        disabled = collect_ignored_checks([action], max_age_enabled=False, min_age_enabled=False, nodejs_enabled=False)
+
+        assert skipped == [IgnoredCheck("actions/old", "nodejs-version", "hint on uses: line")]
+        assert not disabled
+
+    def test_collects_min_age_ignore_when_enabled(self) -> None:
+        """A min-age hint is recorded only when that wait is enabled."""
+        action = GithubAction(
+            "actions/checkout",
+            "v4",
+            comments=["v4", "gh-action-pulse: ignore[min-age]"],
+        )
+
+        skipped = collect_ignored_checks([action], max_age_enabled=False, min_age_enabled=True, nodejs_enabled=False)
+        disabled = collect_ignored_checks([action], max_age_enabled=False, min_age_enabled=False, nodejs_enabled=False)
+
+        assert skipped == [IgnoredCheck("actions/checkout", "min-age", "hint on uses: line")]
+        assert not disabled
+
+    def test_report_prints_ignored_checks_table(self) -> None:
+        """The ignored-checks recap lists the action, check id, and why it was skipped."""
+        with console.capture() as capture:
+            report_ignored_checks([IgnoredCheck("actions/old", "max-age", "hint on uses: line")])
+
+        output = capture.get()
+        assert "Ignored checks" in output
+        assert "actions/old" in output
+        assert "max-age" in output
+        assert "hint on uses: line" in output
+
+    def test_report_is_silent_when_empty(self) -> None:
+        """No ignored-checks table is printed when nothing was skipped."""
+        with console.capture() as capture:
+            report_ignored_checks([])
+
+        assert capture.get() == ""
+
+    def test_summary_includes_ignored_checks(self) -> None:
+        """The closing summary mentions skipped checks when ignore hints were used."""
+        with console.capture() as capture:
+            _print_summary(
+                update_result=UpdateResult(),
+                stale_actions=[],
+                node_version_violations=[],
+                ignored_checks=[IgnoredCheck("actions/old", "max-age", "hint on uses: line")],
+                dry_run=True,
+                exit_code=0,
+            )
+
+        assert "1 ignored check" in capture.get()
 
 
 class TestMainCommand:

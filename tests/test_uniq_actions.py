@@ -98,6 +98,7 @@ class TestUniqGithubActions:
         setup_python = uniq.get_item("actions/setup-python", "def456", "v5.0.0")
         assert setup_python.actual.description == "v5.0.0"
         assert setup_python.actual.comments == ["v5.0.0", "gh-action-pulse: ignore[max-days]"]
+        assert setup_python.actual.ignore_hint.unknown == frozenset({"max-days"})
         cache = uniq.get_item("actions/cache", "ghi789", "gh-action-pulse: ignore[max-days]")
         assert cache.actual.description == "gh-action-pulse: ignore[max-days]"
         assert cache.actual.comments == ["gh-action-pulse: ignore[max-days]"]
@@ -226,6 +227,25 @@ class TestUniqGithubActions:
 
         assert result == [stale]
 
+    def test_get_stale_actions_skips_actions_with_max_age_ignore_hint(self) -> None:
+        """A stale action is omitted from freshness failures when max-age is ignored."""
+        uniq = UniqGithubActions()
+        ignored = GithubAction(
+            "actions/setup-python",
+            "v5",
+            "v5",
+            comments=["v5", "gh-action-pulse: ignore[max-age]"],
+        )
+        ignored.min_age_tag_date = datetime.datetime.now(datetime.UTC) - datetime.timedelta(days=200)
+        stale = GithubAction("actions/checkout", "v4")
+        stale.min_age_tag_date = datetime.datetime.now(datetime.UTC) - datetime.timedelta(days=200)
+        uniq.add(ignored)
+        uniq.add(stale)
+
+        result = uniq.get_stale_actions(150)
+
+        assert result == [stale]
+
     def test_get_stale_actions_returns_empty_when_check_disabled(self) -> None:
         """Verify get_stale_actions skips the check when max_age is 0."""
         uniq = UniqGithubActions()
@@ -233,7 +253,7 @@ class TestUniqGithubActions:
         stale.min_age_tag_date = datetime.datetime.now(datetime.UTC) - datetime.timedelta(days=200)
         uniq.add(stale)
 
-        assert uniq.get_stale_actions(0) == []
+        assert not uniq.get_stale_actions(0)
 
     @patch("gh_action_pulse.uniq_actions.GithubAction.get_fully_qualified")
     def test_get_fully_qualified_contents(self, mock_get_fq: MagicMock) -> None:

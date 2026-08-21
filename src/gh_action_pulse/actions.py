@@ -25,6 +25,8 @@ from typing import TYPE_CHECKING, Literal
 import semver
 from github.GithubException import GithubException
 
+from gh_action_pulse.helpers.uses_line import ParsedIgnoreHint, parse_ignore_checks
+
 logger = logging.getLogger(__name__)
 
 
@@ -46,6 +48,7 @@ class ActualState:
     reference_type: Literal["sha", "tag", "branch", "bullshit"] | None = None
     description_type: Literal["tag", "branch", "bullshit"] | None = None
     date: datetime.datetime | None = None
+    ignore_hint: ParsedIgnoreHint = field(default_factory=ParsedIgnoreHint)
 
 
 @dataclass
@@ -93,12 +96,18 @@ class GithubAction:
     ) -> None:
         """Initialize a GithubAction with its name, reference, and optional description."""
         self.name = name
+        comment_list = list(comments) if comments is not None else []
         self.actual = ActualState(
             reference=reference,
             description=actual_description,
-            comments=list(comments) if comments is not None else [],
+            comments=comment_list,
+            ignore_hint=parse_ignore_checks(comment_list),
         )
         self.recommended = Recommendation()
+
+    def ignores(self, check: str) -> bool:
+        """Return True when this uses-line asked to skip the named check."""
+        return check in self.actual.ignore_hint.checks
 
     def __hash__(self) -> int:
         """Return a hash based on the action name, reference, description, and comments."""
@@ -130,6 +139,8 @@ class GithubAction:
             logger.error("GitHub Action repository '%s' is archived.", repo_name)
             raise GithubActionArchivedError(repo_name)
         self.min_age = min_age
+        if self.ignores("min-age"):
+            logger.debug("Skipping min-age wait for action '%s' due to ignore hint.", self.name)
         self._set_actual_reference_type_and_date()
         logger.debug("actual reference type is %s at date %s", self.actual.reference_type, self.actual.date)
         self._set_actual_description_type()
@@ -402,6 +413,12 @@ class GithubAction:
                 return tag
         return None
 
+    def _effective_min_age(self) -> int:
+        """Return the min-age wait for this line, or 0 when an ignore hint is present."""
+        if self.ignores("min-age"):
+            return 0
+        return self.min_age
+
     def _apply_tag_recommendation(self, tag: Tag, cutoff: datetime.datetime) -> None:
         tag_date = tag.commit.commit.committer.date
         self.recommended.reference = tag.commit.sha
@@ -412,7 +429,7 @@ class GithubAction:
 
     def _set_recommended_reference_and_date_to_tag_if_exists(self, valid_semver_tags: Sequence[Tag]) -> None:
         now = datetime.datetime.now(datetime.UTC)
-        cutoff = now - datetime.timedelta(days=self.min_age)
+        cutoff = now - datetime.timedelta(days=self._effective_min_age())
         self.min_age_tag_date = None
         current_version = self._get_actual_semver_version()
 

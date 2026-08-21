@@ -12,7 +12,8 @@ It is aimed at repositories that want to keep GitHub Actions dependencies unders
 - **Repository redirect handling**: Rewrites moved repositories to their canonical name when GitHub reports a redirect.
 - **Freshness checks**: Warns or fails when the newest eligible SemVer tag is older than your configured threshold.
 - **Node.js runtime check**: Recursively verifies that actions, including composite and local composite dependencies, run on at least a configurable minimum Node.js version (`--minimum-nodejs-version`, default `24`), failing with a dedicated exit code (`3`) when an outdated runtime is detected.
-- **Comment preservation**: Keeps extra trailing comments on `uses:` lines (for example `gh-action-pulse: ignore[max-days]`) when rewriting references.
+- **Comment preservation**: Keeps extra trailing comments on `uses:` lines when rewriting references.
+- **Per-line ignore hints**: Skip `--max-age`, `--min-age`, or the Node.js runtime check for a specific `uses:` line with a `# gh-action-pulse: ignore[...]` comment.
 
 ## How It Works
 
@@ -30,6 +31,7 @@ In practice, this means the tool can:
 - convert branch or tag references into pinned SHAs annotated with the matching tag,
 - preserve branch intent when no suitable tag exists,
 - keep extra trailing comments such as ignore hints,
+- skip `--max-age`, `--min-age`, or Node.js checks for a specific `uses:` line when an ignore hint is present,
 - surface stale upstream action releases with a non-zero exit code.
 
 ## Example
@@ -47,6 +49,15 @@ After:
 ```
 
 If an action repository has moved, the repository name may also be rewritten to the canonical upstream location.
+
+To skip a check for one `uses:` line, add a trailing ignore hint. Quoted and unquoted check ids are both accepted:
+
+```yaml
+- uses: actions/setup-node@abc123 # v4.4.0 # gh-action-pulse: ignore[max-age]
+- uses: some/old-action@def456 # v1.2.3 # gh-action-pulse: ignore[max-age, min-age, nodejs-version]
+```
+
+The matching step is skipped for that line, the CLI reports the skip, and the run does not fail for that check. `ignore[min-age]` still rewrites the line, but selects the newest tag without waiting for `--min-age`. Unknown check ids are reported as warnings and do not skip anything. The hint stays on the line when the reference is rewritten.
 
 ## Setup
 
@@ -133,6 +144,7 @@ The CLI uses [Rich](https://github.com/Textualize/rich) for progress and summari
 - a progress bar while enriching actions from the GitHub API (and while checking Node.js runtimes);
 - colored phase lines for scan, freshness, and Node.js checks;
 - a table of proposed or applied `uses:` rewrites (yellow header in `--dry-run`);
+- a table of checks skipped by `# gh-action-pulse: ignore[...]` hints;
 - a closing summary panel with update counts, warnings, and the exit code.
 
 Routine per-file and per-action chatter is logged at `DEBUG`. Use `--log-level DEBUG` (or `WARNING` / `ERROR`) when you need diagnostic detail; warnings and errors still use Rich-formatted logging without repeating the main user-facing summary.
@@ -179,6 +191,16 @@ The Node.js runtime check does not inspect every `uses:` line in the repository.
 - does not meaningfully check reusable workflows referenced as `uses: org/repo/.github/workflows/foo.yml@ref`, because it looks for `action.yml`/`action.yaml` manifests rather than workflow files.
 
 Set `--minimum-nodejs-version 0` to disable this check entirely.
+
+### Ignore hints (`# gh-action-pulse: ignore[...]`)
+
+Ignore hints apply only to the `uses:` line they are written on. Supported check ids:
+
+- `max-age`: skip the `--max-age` stale-tag failure for that line
+- `min-age`: recommend the newest SemVer tag for that line without waiting for `--min-age`
+- `nodejs-version`: skip the `--minimum-nodejs-version` check for that line, including its composite dependencies
+
+The hint must be a trailing comment on the `uses:` line itself (a comment on the previous YAML line is not read). Extra comments are preserved when the line is rewritten. A config-file ignore list is not implemented yet; see the roadmap below.
 
 ## Roadmap
 

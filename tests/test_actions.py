@@ -54,7 +54,7 @@ class TestGithubAction:
         a1 = GithubAction("repo", "v1", "desc")
         a2 = GithubAction("repo", "v1", "desc")
         a3 = GithubAction("repo", "v2", "desc")
-        a4 = GithubAction("repo", "v1", "desc", comments=["desc", "gh-action-pulse: ignore[max-days]"])
+        a4 = GithubAction("repo", "v1", "desc", comments=["desc", "gh-action-pulse: ignore[max-age]"])
 
         assert a1 == a2
         assert a1 != a3
@@ -64,6 +64,34 @@ class TestGithubAction:
 
         # Coverage for comparison with a different type
         assert a1 != "not a GithubAction"
+
+    def test_parses_ignore_hints_from_comments(self) -> None:
+        """Trailing ignore hints are stored as skipped check ids on the actual state."""
+        action = GithubAction(
+            "actions/checkout",
+            "abc123",
+            "v4.2.2",
+            comments=["v4.2.2", 'gh-action-pulse: ignore["max-age", "min-age", "nodejs-version"]'],
+        )
+
+        assert action.ignores("max-age")
+        assert action.ignores("min-age")
+        assert action.ignores("nodejs-version")
+        assert action.actual.ignore_hint.checks == frozenset({"max-age", "min-age", "nodejs-version"})
+        assert action.actual.ignore_hint.unknown == frozenset()
+
+    def test_unknown_ignore_check_ids_are_kept_separate(self) -> None:
+        """Unrecognized ignore ids are not treated as skipped checks."""
+        action = GithubAction(
+            "actions/checkout",
+            "abc123",
+            "v4.2.2",
+            comments=["v4.2.2", "gh-action-pulse: ignore[max-days]"],
+        )
+
+        assert not action.ignores("max-age")
+        assert action.actual.ignore_hint.checks == frozenset()
+        assert action.actual.ignore_hint.unknown == frozenset({"max-days"})
 
     @patch("gh_action_pulse.actions.GithubAction._set_actual_reference_type_and_date")
     @patch("gh_action_pulse.actions.GithubAction._set_actual_description_type")
@@ -85,6 +113,37 @@ class TestGithubAction:
 
         # THEN
         assert result is action
+        mock_set_actual.assert_called_once()
+        mock_set_desc.assert_called_once()
+        mock_set_rec.assert_called_once()
+
+    @patch("gh_action_pulse.actions.GithubAction._set_actual_reference_type_and_date")
+    @patch("gh_action_pulse.actions.GithubAction._set_actual_description_type")
+    @patch("gh_action_pulse.actions.GithubAction._set_recommended_reference_and_date")
+    def test_get_fully_qualified_logs_min_age_ignore(
+        self,
+        mock_set_rec: MagicMock,
+        mock_set_desc: MagicMock,
+        mock_set_actual: MagicMock,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """A min-age ignore hint is logged while the configured wait is still stored."""
+        action = GithubAction(
+            "actions/checkout",
+            "v4",
+            comments=["v4", "gh-action-pulse: ignore[min-age]"],
+        )
+        mock_g = MagicMock()
+        mock_repo = MagicMock()
+        mock_repo.archived = False
+        mock_repo.full_name = "actions/checkout"
+        mock_g.get_repo.return_value = mock_repo
+
+        with caplog.at_level("DEBUG"):
+            action.get_fully_qualified(mock_g, 30)
+
+        assert action.min_age == 30
+        assert "Skipping min-age wait for action 'actions/checkout'" in caplog.text
         mock_set_actual.assert_called_once()
         mock_set_desc.assert_called_once()
         mock_set_rec.assert_called_once()
@@ -901,6 +960,58 @@ class TestGithubAction:
         assert action.recommended.reference == "sha-for-v4"
         assert action.recommended.date == datetime.datetime(2026, 1, 3, tzinfo=datetime.UTC)
         assert action.recommended.description == "v4.0.0"
+
+    def test__set_recommended_reference_and_date_to_tag_if_exists_honors_min_age_ignore_hint(self) -> None:
+        """Ignoring min-age selects a tag younger than the configured wait."""
+        action = GithubAction(
+            "actions/checkout",
+            "sha-for-main-old",
+            "main",
+            comments=["main", "gh-action-pulse: ignore[min-age]"],
+        )
+        action.min_age = 30
+        now = datetime.datetime.now(datetime.UTC)
+        mock_tag_v6 = MagicMock()
+        mock_tag_v6.name = "v6.0.0"
+        mock_tag_v6.commit.sha = "sha-for-v6"
+        mock_tag_v6.commit.commit.committer.date = now - datetime.timedelta(days=29)
+        mock_tag_v4 = MagicMock()
+        mock_tag_v4.name = "v4.0.0"
+        mock_tag_v4.commit.sha = "sha-for-v4"
+        mock_tag_v4.commit.commit.committer.date = datetime.datetime(2026, 1, 3, tzinfo=datetime.UTC)
+
+        action._set_recommended_reference_and_date_to_tag_if_exists([mock_tag_v6, mock_tag_v4])
+
+        assert action.recommended.reference == "sha-for-v6"
+        assert action.recommended.description == "v6.0.0"
+
+    def test__set_recommended_reference_and_date_to_tag_if_exists_min_age_ignore_upgrades_too_new_tag(self) -> None:
+        """Ignoring min-age upgrades to the newest tag even when it is younger than the wait."""
+        action = GithubAction(
+            "actions/checkout",
+            "v6.0.0",
+            comments=["v6.0.0", "gh-action-pulse: ignore[min-age]"],
+        )
+        action.actual.reference_type = "tag"
+        action.min_age = 30
+        now = datetime.datetime.now(datetime.UTC)
+        mock_tag_v7 = MagicMock()
+        mock_tag_v7.name = "v7.0.0"
+        mock_tag_v7.commit.sha = "sha-for-v7"
+        mock_tag_v7.commit.commit.committer.date = now - datetime.timedelta(days=5)
+        mock_tag_v6 = MagicMock()
+        mock_tag_v6.name = "v6.0.0"
+        mock_tag_v6.commit.sha = "sha-for-v6"
+        mock_tag_v6.commit.commit.committer.date = now - datetime.timedelta(days=29)
+        mock_tag_v4 = MagicMock()
+        mock_tag_v4.name = "v4.0.0"
+        mock_tag_v4.commit.sha = "sha-for-v4"
+        mock_tag_v4.commit.commit.committer.date = datetime.datetime(2026, 1, 3, tzinfo=datetime.UTC)
+
+        action._set_recommended_reference_and_date_to_tag_if_exists([mock_tag_v7, mock_tag_v6, mock_tag_v4])
+
+        assert action.recommended.reference == "sha-for-v7"
+        assert action.recommended.description == "v7.0.0"
 
     def test__set_recommended_reference_and_date_to_tag_if_exists_does_not_downgrade_tag_reference(self) -> None:
         """Pinned tag references must not downgrade when only older tags meet min_age."""

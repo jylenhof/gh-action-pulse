@@ -34,8 +34,9 @@ from rich.text import Text
 from gh_action_pulse import __version__
 from gh_action_pulse.actions import GithubAction, GithubActionArchivedError
 from gh_action_pulse.full_list_of_existing_actions import FullListOfExistingActions
-from gh_action_pulse.helpers.console import console, error, phase_status
+from gh_action_pulse.helpers.console import console, error, format_status_with_ignored, phase_status
 from gh_action_pulse.helpers.constants import (
+    ALLOWED_IGNORE_CHECKS,
     ARCHIVED_ACTION_ERROR_EXIT_CODE,
     DEFAULT_MAX_AGE,
     DEFAULT_MIN_AGE,
@@ -75,6 +76,15 @@ class UpdateResult:
 
     files_changed: int = 0
     replacements: list[Replacement] = field(default_factory=list)
+
+
+@dataclass(frozen=True)
+class IgnoredCheck:
+    """A per-action check skipped because of an inline ignore hint."""
+
+    action: str
+    check: str
+    detail: str
 
 
 def version_callback(*, value: bool) -> None:
@@ -173,10 +183,13 @@ def check_node_versions(
         return []
     checker = NodeVersionChecker(g, minimum_nodejs_version)
     started = time.perf_counter()
-    violations = checker.check_actions(uniq_github_actions.get_actions())
+    actions = uniq_github_actions.get_actions()
+    ignored_count = sum(1 for action in actions if action.ignores("nodejs-version"))
+    violations = checker.check_actions(actions)
     report_node_version_violations(
         violations,
         minimum_nodejs_version,
+        ignored_count=ignored_count,
         elapsed=time.perf_counter() - started,
     )
     return violations
@@ -280,10 +293,54 @@ def _print_updates_table(result: UpdateResult, *, dry_run: bool, elapsed: float 
     console.print(Panel(table, border_style=style))
 
 
+def collect_ignored_checks(
+    actions: list[GithubAction],
+    *,
+    max_age_enabled: bool,
+    min_age_enabled: bool,
+    nodejs_enabled: bool,
+) -> list[IgnoredCheck]:
+    """Build the recap of skipped checks and unknown ignore ids."""
+    ignored: list[IgnoredCheck] = []
+    allowed = ", ".join(sorted(ALLOWED_IGNORE_CHECKS))
+    for action in sorted(actions, key=lambda item: (item.name, item.actual.reference)):
+        if max_age_enabled and action.ignores("max-age"):
+            ignored.append(IgnoredCheck(action.name, "max-age", "hint on uses: line"))
+        if min_age_enabled and action.ignores("min-age"):
+            ignored.append(IgnoredCheck(action.name, "min-age", "hint on uses: line"))
+        if nodejs_enabled and action.ignores("nodejs-version"):
+            ignored.append(IgnoredCheck(action.name, "nodejs-version", "hint on uses: line"))
+        for unknown in sorted(action.actual.ignore_hint.unknown):
+            ignored.append(IgnoredCheck(action.name, unknown, f"unknown check id (allowed: {allowed})"))
+            logger.warning(
+                "Unknown ignore check '%s' on action '%s'; allowed values are: %s.",
+                unknown,
+                action.name,
+                allowed,
+            )
+    return ignored
+
+
+def report_ignored_checks(ignored_checks: list[IgnoredCheck]) -> None:
+    """Display checks skipped because of inline ignore hints."""
+    ignored_list = list(ignored_checks)
+    if not ignored_list:
+        return
+
+    table = Table(title="Ignored checks", show_header=True, header_style="cyan")
+    table.add_column("Action")
+    table.add_column("Check")
+    table.add_column("Detail")
+    for item in ignored_list:
+        table.add_row(item.action, Text(item.check), item.detail)
+    console.print(table)
+
+
 def warn_about_stale_actions(
     stale_actions: list[GithubAction],
     max_age: int,
     *,
+    ignored_count: int = 0,
     elapsed: float | None = None,
 ) -> None:
     """Log warnings for actions whose min-age eligible tag exceeds the freshness threshold."""
@@ -291,12 +348,16 @@ def warn_about_stale_actions(
         return
 
     if not stale_actions:
-        phase_status("Checking tag freshness…", "OK", elapsed=elapsed)
+        phase_status(
+            "Checking tag freshness…",
+            format_status_with_ignored("OK", ignored_count),
+            elapsed=elapsed,
+        )
         return
 
     phase_status(
         "Checking tag freshness…",
-        f"{len(stale_actions)} stale",
+        format_status_with_ignored(f"{len(stale_actions)} stale", ignored_count),
         style="yellow",
         elapsed=elapsed,
     )
@@ -327,11 +388,12 @@ def warn_about_stale_actions(
     console.print(table)
 
 
-def _print_summary(
+def _print_summary(  # noqa: PLR0913
     *,
     update_result: UpdateResult,
     stale_actions: list[GithubAction],
     node_version_violations: list[NodeVersionViolation],
+    ignored_checks: list[IgnoredCheck],
     dry_run: bool,
     exit_code: int,
 ) -> None:
@@ -350,6 +412,8 @@ def _print_summary(
         parts.append(
             f"{len(node_version_violations)} Node.js violation{'s' if len(node_version_violations) != 1 else ''}"
         )
+    if ignored_checks:
+        parts.append(f"{len(ignored_checks)} ignored check{'s' if len(ignored_checks) != 1 else ''}")
 
     parts.append(f"exit {exit_code}")
     border = "green" if exit_code == 0 else "red"
@@ -458,6 +522,7 @@ def main(
             update_result=UpdateResult(),
             stale_actions=[],
             node_version_violations=[],
+            ignored_checks=[],
             dry_run=dry_run,
             exit_code=ARCHIVED_ACTION_ERROR_EXIT_CODE,
         )
@@ -465,13 +530,27 @@ def main(
 
     stale_started = time.perf_counter()
     stale_actions = uniq_github_actions.get_stale_actions(max_age_in_days)
+    max_age_ignored_count = (
+        sum(1 for action in uniq_github_actions.get_actions() if action.ignores("max-age"))
+        if max_age_in_days > 0
+        else 0
+    )
     warn_about_stale_actions(
         stale_actions,
         max_age_in_days,
+        ignored_count=max_age_ignored_count,
         elapsed=time.perf_counter() - stale_started,
     )
 
     node_version_violations = check_node_versions(g, uniq_github_actions, minimum_nodejs_version)
+
+    ignored_checks = collect_ignored_checks(
+        list(uniq_github_actions.get_actions()),
+        max_age_enabled=max_age_in_days > 0,
+        min_age_enabled=min_age_in_days > 0,
+        nodejs_enabled=minimum_nodejs_version > 0,
+    )
+    report_ignored_checks(ignored_checks)
 
     update_result = apply_recommended_updates(results, uniq_github_actions, dry_run=dry_run)
 
@@ -480,6 +559,7 @@ def main(
             update_result=update_result,
             stale_actions=stale_actions,
             node_version_violations=node_version_violations,
+            ignored_checks=ignored_checks,
             dry_run=dry_run,
             exit_code=NODEJS_VERSION_ERROR_EXIT_CODE,
         )
@@ -490,6 +570,7 @@ def main(
             update_result=update_result,
             stale_actions=stale_actions,
             node_version_violations=node_version_violations,
+            ignored_checks=ignored_checks,
             dry_run=dry_run,
             exit_code=STALE_TAG_ERROR_EXIT_CODE,
         )
@@ -499,6 +580,7 @@ def main(
         update_result=update_result,
         stale_actions=stale_actions,
         node_version_violations=node_version_violations,
+        ignored_checks=ignored_checks,
         dry_run=dry_run,
         exit_code=0,
     )
