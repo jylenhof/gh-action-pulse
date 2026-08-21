@@ -22,6 +22,7 @@ from unittest.mock import MagicMock
 from github.GithubException import GithubException
 
 from gh_action_pulse.actions import GithubAction
+from gh_action_pulse.helpers.console import console
 from gh_action_pulse.nodejs_version import (
     NodeVersionChecker,
     NodeVersionViolation,
@@ -62,12 +63,13 @@ def make_action(  # noqa: PLR0913
     *,
     reference: str = "v1",
     description: str | None = None,
+    comments: list[str] | None = None,
     recommended_reference: str | None = None,
     recommended_description: str | None = None,
     canonical: str | None = None,
 ) -> GithubAction:
     """Build a GithubAction with an optional recommendation, as produced by the resolver."""
-    action = GithubAction(name=name, reference=reference, actual_description=description)
+    action = GithubAction(name=name, reference=reference, actual_description=description, comments=comments)
     action.recommended.reference = recommended_reference
     action.recommended.description = recommended_description
     action.recommended.repo_canonical_name = canonical
@@ -220,6 +222,54 @@ class TestCheckActions:
         action = make_action("actions/old", recommended_reference="sha", recommended_description="v1")
 
         assert len(checker.check_actions([action, action])) == 1
+
+    def test_nodejs_ignore_hint_skips_the_action(self) -> None:
+        """An ignore[nodejs-version] hint skips that root action without inspecting it."""
+        g = make_github({"actions/old": {"action.yml": "runs:\n  using: node16\n"}})
+        checker = NodeVersionChecker(g, 24)
+        action = make_action(
+            "actions/old",
+            comments=["v1", "gh-action-pulse: ignore[nodejs-version]"],
+            recommended_reference="sha",
+            recommended_description="v1",
+        )
+
+        assert not checker.check_actions([action])
+        g.get_repo.assert_not_called()
+
+    def test_nodejs_ignore_hint_does_not_skip_other_actions(self) -> None:
+        """A sibling action without an ignore hint is still inspected."""
+        g = make_github(
+            {
+                "actions/old": {"action.yml": "runs:\n  using: node16\n"},
+                "actions/checkout": {"action.yml": "runs:\n  using: node20\n"},
+            }
+        )
+        checker = NodeVersionChecker(g, 24)
+        ignored = make_action(
+            "actions/old",
+            comments=["v1", "gh-action-pulse: ignore[nodejs-version]"],
+            recommended_reference="sha",
+            recommended_description="v1",
+        )
+        other = make_action(
+            "actions/checkout",
+            recommended_reference="sha",
+            recommended_description="v4",
+        )
+
+        violations = checker.check_actions([ignored, other])
+
+        assert len(violations) == 1
+        assert violations[0].action == "actions/checkout@v4"
+
+
+def test_report_mentions_ignored_count() -> None:
+    """The Node.js phase status includes how many root actions were skipped."""
+    with console.capture() as capture:
+        report_node_version_violations([], 24, ignored_count=1)
+
+    assert "OK (1 ignored)" in capture.get()
 
 
 def test_report_logs_error_per_violation(caplog: pytest.LogCaptureFixture) -> None:

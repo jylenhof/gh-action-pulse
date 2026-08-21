@@ -131,4 +131,11 @@ class UniqGithubActions:
         """Return actions whose min_age eligible tag is older than max_age."""
         if max_age <= 0:
             return []
-        return [action for action in self.get_actions() if not action.is_tag_fresh(max_age)]
+        stale: list[GithubAction] = []
+        for action in self.get_actions():
+            if action.ignores("max-age"):
+                logger.debug("Skipping max-age check for action '%s' due to ignore hint.", action.name)
+                continue
+            if not action.is_tag_fresh(max_age):
+                stale.append(action)
+        return stale

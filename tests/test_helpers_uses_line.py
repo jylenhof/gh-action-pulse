@@ -15,7 +15,7 @@
 
 """Tests for uses-line parsing helpers."""
 
-from gh_action_pulse.helpers.uses_line import USES_LINE_PATTERN, parse_trailing_comments
+from gh_action_pulse.helpers.uses_line import USES_LINE_PATTERN, parse_ignore_checks, parse_trailing_comments
 
 
 class TestUsesLineHelpers:
@@ -25,10 +25,45 @@ class TestUsesLineHelpers:
         """Trailing comments are split on `#`; the first fragment is the description."""
         assert parse_trailing_comments(None) == (None, [])
         assert parse_trailing_comments("v4.2.2") == ("v4.2.2", ["v4.2.2"])
-        assert parse_trailing_comments("v4.2.2 # gh-action-pulse: ignore[max-days]") == (
+        assert parse_trailing_comments("v4.2.2 # gh-action-pulse: ignore[max-age]") == (
             "v4.2.2",
-            ["v4.2.2", "gh-action-pulse: ignore[max-days]"],
+            ["v4.2.2", "gh-action-pulse: ignore[max-age]"],
         )
+
+    def test_parse_ignore_checks_extracts_known_and_unknown_ids(self) -> None:
+        """Ignore hints accept quoted or unquoted ids and split unknown values out."""
+        empty = parse_ignore_checks([])
+        assert empty.checks == frozenset()
+        assert empty.unknown == frozenset()
+
+        assert parse_ignore_checks(["v4.2.2"]).checks == frozenset()
+
+        unquoted = parse_ignore_checks(["v4.2.2", "gh-action-pulse: ignore[max-age]"])
+        assert unquoted.checks == frozenset({"max-age"})
+        assert unquoted.unknown == frozenset()
+
+        quoted = parse_ignore_checks(['gh-action-pulse: ignore["max-age", "min-age", "nodejs-version"]'])
+        assert quoted.checks == frozenset({"max-age", "min-age", "nodejs-version"})
+        assert quoted.unknown == frozenset()
+
+        mixed = parse_ignore_checks(["gh-action-pulse: ignore[max-age, max-days]"])
+        assert mixed.checks == frozenset({"max-age"})
+        assert mixed.unknown == frozenset({"max-days"})
+
+        whitespace = parse_ignore_checks(["gh-action-pulse:  ignore[ max-age , nodejs-version ]"])
+        assert whitespace.checks == frozenset({"max-age", "nodejs-version"})
+
+        trailing_comma = parse_ignore_checks(["gh-action-pulse: ignore[max-age,]"])
+        assert trailing_comma.checks == frozenset({"max-age"})
+        assert trailing_comma.unknown == frozenset()
+
+        split_comments = parse_ignore_checks(
+            [
+                "gh-action-pulse: ignore[max-age]",
+                "gh-action-pulse: ignore[nodejs-version]",
+            ]
+        )
+        assert split_comments.checks == frozenset({"max-age", "nodejs-version"})
 
     def test_matches_uses_line_with_multiple_comments(self) -> None:
         """Named groups capture the action, reference, and raw trailing comments."""

@@ -43,6 +43,13 @@ def phase_status(label: str, status: str, *, style: str = "green", elapsed: floa
     console.print(f"[cyan]●[/cyan] {label} [{style}]{status}[/{style}]{timing}")
 
 
+def format_status_with_ignored(status: str, ignored_count: int) -> str:
+    """Append an ignored-count suffix when at least one check was skipped."""
+    if ignored_count <= 0:
+        return status
+    return f"{status} ({ignored_count} ignored)"
+
+
 def success(message: str) -> None:
     """Print a green success message."""
     console.print(f"[green]{message}[/green]")

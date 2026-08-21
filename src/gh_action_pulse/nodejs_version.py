@@ -36,7 +36,7 @@ from github.GithubException import GithubException
 from rich.progress import BarColumn, Progress, SpinnerColumn, TaskProgressColumn, TimeElapsedColumn
 from rich.table import Table
 
-from gh_action_pulse.helpers.console import console, phase_status
+from gh_action_pulse.helpers.console import console, format_status_with_ignored, phase_status
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
@@ -119,6 +119,13 @@ class NodeVersionChecker:  # pylint: disable=too-few-public-methods
                     task_id,
                     description=f"Checking Node.js >= {self._minimum}  {action.name}",
                 )
+                if action.ignores("nodejs-version"):
+                    logger.debug(
+                        "Skipping Node.js version check for action '%s' due to ignore hint.",
+                        action.name,
+                    )
+                    progress.advance(task_id)
+                    continue
                 target = self._recommended_target(action)
                 if target is not None:
                     location, action_dir, display = target
@@ -286,16 +293,22 @@ def report_node_version_violations(
     violations: Iterable[NodeVersionViolation],
     minimum_version: int,
     *,
+    ignored_count: int = 0,
     elapsed: float | None = None,
 ) -> None:
     """Log and display each action running below the required Node.js version."""
     violation_list = list(violations)
     label = f"Checking Node.js >= {minimum_version}…"
     if not violation_list:
-        phase_status(label, "OK", elapsed=elapsed)
+        phase_status(label, format_status_with_ignored("OK", ignored_count), elapsed=elapsed)
         return
 
-    phase_status(label, f"{len(violation_list)} violation(s)", style="red", elapsed=elapsed)
+    phase_status(
+        label,
+        format_status_with_ignored(f"{len(violation_list)} violation(s)", ignored_count),
+        style="red",
+        elapsed=elapsed,
+    )
 
     table = Table(title=f"Node.js < {minimum_version}", show_header=True, header_style="red")
     table.add_column("Action")
