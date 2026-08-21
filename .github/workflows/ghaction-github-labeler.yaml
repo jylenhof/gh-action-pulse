@@ -25,7 +25,8 @@ jobs:
           persist-credentials: false
 
       - name: Run Labeler
-        uses: crazy-max/ghaction-github-labeler@548a7c3603594ec17c819e1239f281a3b801ab4d # v6.0.0
+        # editorconfig-checker-disable-next-line # this is a really long line
+        uses: crazy-max/ghaction-github-labeler@548a7c3603594ec17c819e1239f281a3b801ab4d # v6.0.0 # gh-action-pulse: ignore[max-age]
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           yaml-file: .github/labels.yml
