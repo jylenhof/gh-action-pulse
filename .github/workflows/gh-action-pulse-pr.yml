@@ -75,8 +75,7 @@ jobs:
           else
             pulse=(gh-action-pulse)
           fi
-          # download-artifact last tag is 150 days... so move up limit
-          "${pulse[@]}" --max-age 200
+          "${pulse[@]}"
           status=$?
           echo "exit-code=${status}" >> "$GITHUB_OUTPUT"
           if [ "$status" -ne 0 ]; then
