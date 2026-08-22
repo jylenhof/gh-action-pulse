@@ -246,6 +246,44 @@ class TestUniqGithubActions:
 
         assert result == [stale]
 
+    def test_get_stale_actions_uses_max_days_override(self) -> None:
+        """A max-age override raises the freshness limit for that action only."""
+        uniq = UniqGithubActions()
+        overridden = GithubAction(
+            "actions/setup-python",
+            "v5",
+            "v5",
+            comments=["v5", "gh-action-pulse: override[max-age=200]"],
+        )
+        overridden.min_age_tag_date = datetime.datetime.now(datetime.UTC) - datetime.timedelta(days=180)
+        stale = GithubAction("actions/checkout", "v4")
+        stale.min_age_tag_date = datetime.datetime.now(datetime.UTC) - datetime.timedelta(days=180)
+        uniq.add(overridden)
+        uniq.add(stale)
+
+        result = uniq.get_stale_actions(150)
+
+        assert result == [stale]
+
+    def test_get_stale_actions_override_can_enable_disabled_check(self) -> None:
+        """A max-age override still runs when the CLI max-age check is disabled."""
+        uniq = UniqGithubActions()
+        overridden = GithubAction(
+            "actions/setup-python",
+            "v5",
+            "v5",
+            comments=["v5", "gh-action-pulse: override[max-age=150]"],
+        )
+        overridden.min_age_tag_date = datetime.datetime.now(datetime.UTC) - datetime.timedelta(days=200)
+        plain = GithubAction("actions/checkout", "v4")
+        plain.min_age_tag_date = datetime.datetime.now(datetime.UTC) - datetime.timedelta(days=200)
+        uniq.add(overridden)
+        uniq.add(plain)
+
+        result = uniq.get_stale_actions(0)
+
+        assert result == [overridden]
+
     def test_get_stale_actions_returns_empty_when_check_disabled(self) -> None:
         """Verify get_stale_actions skips the check when max_age is 0."""
         uniq = UniqGithubActions()

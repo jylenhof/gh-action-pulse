@@ -93,6 +93,39 @@ class TestGithubAction:
         assert action.actual.ignore_hint.checks == frozenset()
         assert action.actual.ignore_hint.unknown == frozenset({"max-days"})
 
+    def test_parses_override_hints_from_comments(self) -> None:
+        """Trailing override hints are stored as per-check thresholds on the actual state."""
+        action = GithubAction(
+            "actions/checkout",
+            "abc123",
+            "v4.2.2",
+            comments=["v4.2.2", "gh-action-pulse: override[max-age=200, min-age=3, nodejs-version=20]"],
+        )
+
+        assert action.override("max-age") == 200
+        assert action.override("min-age") == 3
+        assert action.override("nodejs-version") == 20
+        assert action.effective_max_age(150) == 200
+        assert action.effective_nodejs_version(24) == 20
+
+    def test_ignore_hint_wins_over_override(self) -> None:
+        """An ignore hint disables the matching check even when an override is present."""
+        action = GithubAction(
+            "actions/checkout",
+            "abc123",
+            "v4.2.2",
+            comments=[
+                "v4.2.2",
+                "gh-action-pulse: ignore[max-age, nodejs-version]",
+                "gh-action-pulse: override[max-age=200, nodejs-version=20]",
+            ],
+        )
+
+        assert action.ignores("max-age")
+        assert action.override("max-age") == 200
+        assert action.effective_max_age(150) == 0
+        assert action.effective_nodejs_version(24) == 0
+
     @patch("gh_action_pulse.actions.GithubAction._set_actual_reference_type_and_date")
     @patch("gh_action_pulse.actions.GithubAction._set_actual_description_type")
     @patch("gh_action_pulse.actions.GithubAction._set_recommended_reference_and_date")
@@ -144,6 +177,38 @@ class TestGithubAction:
 
         assert action.min_age == 30
         assert "Skipping min-age wait for action 'actions/checkout'" in caplog.text
+        mock_set_actual.assert_called_once()
+        mock_set_desc.assert_called_once()
+        mock_set_rec.assert_called_once()
+
+    @patch("gh_action_pulse.actions.GithubAction._set_actual_reference_type_and_date")
+    @patch("gh_action_pulse.actions.GithubAction._set_actual_description_type")
+    @patch("gh_action_pulse.actions.GithubAction._set_recommended_reference_and_date")
+    def test_get_fully_qualified_logs_min_age_override(
+        self,
+        mock_set_rec: MagicMock,
+        mock_set_desc: MagicMock,
+        mock_set_actual: MagicMock,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """A min-age override is logged while the CLI wait is still stored."""
+        action = GithubAction(
+            "actions/checkout",
+            "v4",
+            comments=["v4", "gh-action-pulse: override[min-age=3]"],
+        )
+        mock_g = MagicMock()
+        mock_repo = MagicMock()
+        mock_repo.archived = False
+        mock_repo.full_name = "actions/checkout"
+        mock_g.get_repo.return_value = mock_repo
+
+        with caplog.at_level("DEBUG"):
+            action.get_fully_qualified(mock_g, 30)
+
+        assert action.min_age == 30
+        assert action.override("min-age") == 3
+        assert "Using min-age override of 3 days for action 'actions/checkout'" in caplog.text
         mock_set_actual.assert_called_once()
         mock_set_desc.assert_called_once()
         mock_set_rec.assert_called_once()
@@ -975,6 +1040,30 @@ class TestGithubAction:
         mock_tag_v6.name = "v6.0.0"
         mock_tag_v6.commit.sha = "sha-for-v6"
         mock_tag_v6.commit.commit.committer.date = now - datetime.timedelta(days=29)
+        mock_tag_v4 = MagicMock()
+        mock_tag_v4.name = "v4.0.0"
+        mock_tag_v4.commit.sha = "sha-for-v4"
+        mock_tag_v4.commit.commit.committer.date = datetime.datetime(2026, 1, 3, tzinfo=datetime.UTC)
+
+        action._set_recommended_reference_and_date_to_tag_if_exists([mock_tag_v6, mock_tag_v4])
+
+        assert action.recommended.reference == "sha-for-v6"
+        assert action.recommended.description == "v6.0.0"
+
+    def test__set_recommended_reference_and_date_to_tag_if_exists_honors_min_age_override(self) -> None:
+        """A min-age override selects a tag that is old enough for the override but not the CLI wait."""
+        action = GithubAction(
+            "actions/checkout",
+            "sha-for-main-old",
+            "main",
+            comments=["main", "gh-action-pulse: override[min-age=7]"],
+        )
+        action.min_age = 30
+        now = datetime.datetime.now(datetime.UTC)
+        mock_tag_v6 = MagicMock()
+        mock_tag_v6.name = "v6.0.0"
+        mock_tag_v6.commit.sha = "sha-for-v6"
+        mock_tag_v6.commit.commit.committer.date = now - datetime.timedelta(days=10)
         mock_tag_v4 = MagicMock()
         mock_tag_v4.name = "v4.0.0"
         mock_tag_v4.commit.sha = "sha-for-v4"

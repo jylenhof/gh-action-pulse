@@ -15,7 +15,12 @@
 
 """Tests for uses-line parsing helpers."""
 
-from gh_action_pulse.helpers.uses_line import USES_LINE_PATTERN, parse_ignore_checks, parse_trailing_comments
+from gh_action_pulse.helpers.uses_line import (
+    USES_LINE_PATTERN,
+    parse_ignore_checks,
+    parse_override_hints,
+    parse_trailing_comments,
+)
 
 
 class TestUsesLineHelpers:
@@ -64,6 +69,56 @@ class TestUsesLineHelpers:
             ]
         )
         assert split_comments.checks == frozenset({"max-age", "nodejs-version"})
+
+    def test_parse_override_hints_extracts_assignments(self) -> None:
+        """Override hints accept comma-separated assignments for the three known keys."""
+        empty = parse_override_hints([])
+        assert not empty.values
+        assert empty.unknown == frozenset()
+        assert not empty.invalid
+
+        assert not parse_override_hints(["v4.2.2"]).values
+
+        single = parse_override_hints(["v4.2.2", "gh-action-pulse: override[max-age=200]"])
+        assert single.values == {"max-age": 200}
+        assert single.unknown == frozenset()
+        assert not single.invalid
+
+        several = parse_override_hints(["gh-action-pulse: override[max-age=180, min-age=3, nodejs-version=20]"])
+        assert several.values == {"max-age": 180, "min-age": 3, "nodejs-version": 20}
+
+        quoted = parse_override_hints(['gh-action-pulse: override["max-age"="200", "min-age"=0]'])
+        assert quoted.values == {"max-age": 200, "min-age": 0}
+
+        last_wins = parse_override_hints(
+            [
+                "gh-action-pulse: override[max-age=150]",
+                "gh-action-pulse: override[max-age=200, min-age=14]",
+            ]
+        )
+        assert last_wins.values == {"max-age": 200, "min-age": 14}
+
+        whitespace = parse_override_hints(["gh-action-pulse:  override[ max-age = 200 , nodejs-version = 20 ]"])
+        assert whitespace.values == {"max-age": 200, "nodejs-version": 20}
+
+        trailing_comma = parse_override_hints(["gh-action-pulse: override[max-age=200,]"])
+        assert trailing_comma.values == {"max-age": 200}
+
+        mixed = parse_override_hints(["gh-action-pulse: override[max-age=200, max-days=180, min-age]"])
+        assert mixed.values == {"max-age": 200}
+        assert mixed.unknown == frozenset({"max-days", "min-age"})
+
+        invalid = parse_override_hints(["gh-action-pulse: override[min-age=-1, max-age=200]"])
+        assert invalid.values == {"max-age": 200}
+        assert invalid.invalid == (("min-age", "min-age must be 0 or greater."),)
+
+        negative_max = parse_override_hints(["gh-action-pulse: override[max-age=-5]"])
+        assert not negative_max.values
+        assert negative_max.invalid == (("max-age", "max-age must be 0 or greater."),)
+
+        too_large = parse_override_hints(["gh-action-pulse: override[min-age=61]"])
+        assert not too_large.values
+        assert too_large.invalid == (("min-age", "min-age cannot exceed 60 days."),)
 
     def test_matches_uses_line_with_multiple_comments(self) -> None:
         """Named groups capture the action, reference, and raw trailing comments."""

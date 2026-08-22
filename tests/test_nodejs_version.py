@@ -263,6 +263,50 @@ class TestCheckActions:
         assert len(violations) == 1
         assert violations[0].action == "actions/checkout@v4"
 
+    def test_nodejs_override_hint_lowers_the_minimum(self) -> None:
+        """An override[nodejs-version=16] hint accepts a runtime below the CLI minimum."""
+        g = make_github({"actions/old": {"action.yml": "runs:\n  using: node16\n"}})
+        checker = NodeVersionChecker(g, 24)
+        action = make_action(
+            "actions/old",
+            comments=["v1", "gh-action-pulse: override[nodejs-version=16]"],
+            recommended_reference="sha",
+            recommended_description="v1",
+        )
+
+        assert not checker.check_actions([action])
+
+    def test_nodejs_override_hint_still_fails_below_override(self) -> None:
+        """An override does not skip the check; it only changes the threshold."""
+        g = make_github({"actions/old": {"action.yml": "runs:\n  using: node16\n"}})
+        checker = NodeVersionChecker(g, 24)
+        action = make_action(
+            "actions/old",
+            comments=["v1", "gh-action-pulse: override[nodejs-version=20]"],
+            recommended_reference="sha",
+            recommended_description="v1",
+        )
+
+        violations = checker.check_actions([action])
+
+        assert len(violations) == 1
+        assert violations[0].node_version == 16
+        assert violations[0].minimum_version == 20
+
+    def test_nodejs_override_zero_skips_the_action(self) -> None:
+        """override[nodejs-version=0] disables the Node.js check for that line."""
+        g = make_github({"actions/old": {"action.yml": "runs:\n  using: node16\n"}})
+        checker = NodeVersionChecker(g, 24)
+        action = make_action(
+            "actions/old",
+            comments=["v1", "gh-action-pulse: override[nodejs-version=0]"],
+            recommended_reference="sha",
+            recommended_description="v1",
+        )
+
+        assert not checker.check_actions([action])
+        g.get_repo.assert_not_called()
+
 
 def test_report_mentions_ignored_count() -> None:
     """The Node.js phase status includes how many root actions were skipped."""

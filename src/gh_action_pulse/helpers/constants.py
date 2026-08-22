@@ -32,8 +32,10 @@ DEFAULT_MAX_AGE = 150
 # are expected to run on. Set to 0 to disable the check.
 DEFAULT_MINIMUM_NODEJS_VERSION = 24
 
-# Check ids accepted by `# gh-action-pulse: ignore[...]` trailing comments.
+# Check ids accepted by `# gh-action-pulse: ignore[...]` and
+# `# gh-action-pulse: override[key=value, ...]` trailing comments.
 ALLOWED_IGNORE_CHECKS = frozenset({"max-age", "min-age", "nodejs-version"})
+ALLOWED_OVERRIDE_KEYS = ALLOWED_IGNORE_CHECKS
 
 # Dedicated CLI exit codes for known failure conditions.
 GITHUB_TOKEN_ERROR_EXIT_CODE = 2

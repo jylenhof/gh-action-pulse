@@ -14,6 +14,7 @@ It is aimed at repositories that want to keep GitHub Actions dependencies unders
 - **Node.js runtime check**: Recursively verifies that actions, including composite and local composite dependencies, run on at least a configurable minimum Node.js version (`--minimum-nodejs-version`, default `24`), failing with a dedicated exit code (`3`) when an outdated runtime is detected.
 - **Comment preservation**: Keeps extra trailing comments on `uses:` lines when rewriting references.
 - **Per-line ignore hints**: Skip `--max-age`, `--min-age`, or the Node.js runtime check for a specific `uses:` line with a `# gh-action-pulse: ignore[...]` comment.
+- **Per-line override hints**: Change `--max-age`, `--min-age`, or `--minimum-nodejs-version` for a specific `uses:` line with a `# gh-action-pulse: override[max-age=200]` comment.
 
 ## How It Works
 
@@ -30,8 +31,9 @@ In practice, this means the tool can:
 
 - convert branch or tag references into pinned SHAs annotated with the matching tag,
 - preserve branch intent when no suitable tag exists,
-- keep extra trailing comments such as ignore hints,
+- keep extra trailing comments such as ignore and override hints,
 - skip `--max-age`, `--min-age`, or Node.js checks for a specific `uses:` line when an ignore hint is present,
+- use a different `--max-age`, `--min-age`, or Node.js minimum for a specific `uses:` line when an override hint is present,
 - surface stale upstream action releases with a non-zero exit code.
 
 ## Example
@@ -58,6 +60,15 @@ To skip a check for one `uses:` line, add a trailing ignore hint. Quoted and unq
 ```
 
 The matching step is skipped for that line, the CLI reports the skip, and the run does not fail for that check. `ignore[min-age]` still rewrites the line, but selects the newest tag without waiting for `--min-age`. Unknown check ids are reported as warnings and do not skip anything. The hint stays on the line when the reference is rewritten.
+
+To change a threshold for one `uses:` line instead of skipping the check, add an override hint. Several assignments can be comma-separated inside the brackets:
+
+```yaml
+- uses: actions/setup-node@abc123 # v4.4.0 # gh-action-pulse: override[max-age=200]
+- uses: some/old-action@def456 # v1.2.3 # gh-action-pulse: override[max-age=200, min-age=3, nodejs-version=20]
+```
+
+The matching check still runs, but uses the per-line value. `ignore[...]` on the same line wins over `override[...]` for that check. Unknown keys and out-of-range values are reported as warnings and are not applied. The hint stays on the line when the reference is rewritten.
 
 ## Setup
 
@@ -145,6 +156,7 @@ The CLI uses [Rich](https://github.com/Textualize/rich) for progress and summari
 - colored phase lines for scan, freshness, and Node.js checks;
 - a table of proposed or applied `uses:` rewrites (yellow header in `--dry-run`);
 - a table of checks skipped by `# gh-action-pulse: ignore[...]` hints;
+- a table of per-line thresholds from `# gh-action-pulse: override[...]` hints;
 - a closing summary panel with update counts, warnings, and the exit code.
 
 Routine per-file and per-action chatter is logged at `DEBUG`. Use `--log-level DEBUG` (or `WARNING` / `ERROR`) when you need diagnostic detail; warnings and errors still use Rich-formatted logging without repeating the main user-facing summary.
@@ -201,6 +213,18 @@ Ignore hints apply only to the `uses:` line they are written on. Supported check
 - `nodejs-version`: skip the `--minimum-nodejs-version` check for that line, including its composite dependencies
 
 The hint must be a trailing comment on the `uses:` line itself (a comment on the previous YAML line is not read). Extra comments are preserved when the line is rewritten. A config-file ignore list is not implemented yet; see the roadmap below.
+
+### Override hints (`# gh-action-pulse: override[...]`)
+
+Override hints apply only to the `uses:` line they are written on. Supported assignments (quoted and unquoted keys/values are both accepted):
+
+- `max-age`: use this many days as the stale-tag limit for that line
+- `min-age`: wait this many days before recommending a SemVer tag for that line
+- `nodejs-version`: require this Node.js major version for that line, including its composite dependencies
+
+Several assignments can be comma-separated: `override[max-age=200, min-age=3, nodejs-version=20]`. Duplicate keys keep the last value. `0` disables that check for the line. An `ignore[...]` hint for the same check on the same line takes precedence. Unknown keys and values outside the CLI bounds are reported as warnings and ignored.
+
+The hint must be a trailing comment on the `uses:` line itself. Extra comments are preserved when the line is rewritten.
 
 ## Roadmap
 
