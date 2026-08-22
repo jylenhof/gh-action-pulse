@@ -18,6 +18,7 @@
 import datetime
 import logging
 from contextlib import contextmanager
+from pathlib import Path
 from typing import TYPE_CHECKING
 from unittest.mock import MagicMock, patch
 
@@ -37,7 +38,9 @@ from gh_action_pulse.helpers.constants import (
 from gh_action_pulse.main import (
     IgnoredCheck,
     OverriddenSetting,
+    Replacement,
     UpdateResult,
+    _format_uses_change,
     _print_summary,
     app,
     apply_recommended_updates,
@@ -59,7 +62,6 @@ from gh_action_pulse.uniq_actions import UniqGithubActions
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
-    from pathlib import Path
 
 runner = CliRunner()
 
@@ -226,6 +228,22 @@ class TestCheckNodeVersions:
 
         assert not result
         assert mock_report.call_args.kwargs["ignored_count"] == 1
+
+    def test_disabled_when_minimum_is_zero_and_override_is_ignored(self) -> None:
+        """An ignored nodejs-version override does not re-enable a disabled CLI check."""
+        ignored = GithubAction(
+            "actions/old",
+            "v1",
+            comments=[
+                "v1",
+                "gh-action-pulse: ignore[nodejs-version]",
+                "gh-action-pulse: override[nodejs-version=20]",
+            ],
+        )
+        uniq = MagicMock()
+        uniq.get_actions.return_value = {ignored}
+
+        assert not check_node_versions(MagicMock(), uniq, 0)
 
 
 class TestApplyRecommendedUpdates:
@@ -449,6 +467,10 @@ class TestApplyRecommendedUpdates:
 
         assert workflow.read_text(encoding="utf-8") == original
 
+    def test_format_uses_change_falls_back_when_line_has_no_uses(self) -> None:
+        """Lines that do not contain `uses:` are shown stripped as old → new."""
+        assert _format_uses_change("  old pin  ", "  new pin  ") == "old pin → new pin"
+
 
 class TestWarnAboutStaleActions:
     """Unit tests for stale-action warning helpers."""
@@ -502,6 +524,25 @@ class TestWarnAboutStaleActions:
             warn_about_stale_actions([action], 150, ignored_count=1)
 
         assert "1 stale (1 ignored)" in capture.get()
+
+    def test_omits_limit_in_title_when_max_age_is_disabled(self) -> None:
+        """Override-driven stale results still render when the CLI max-age is 0."""
+        action = GithubAction("actions/example", "v1")
+        action.has_semver_tags = False
+
+        with console.capture() as capture:
+            warn_about_stale_actions([action], 0)
+
+        output = capture.get()
+        assert "Stale tags" in output
+        assert "max-age" not in output
+
+    def test_is_silent_when_disabled_and_nothing_is_stale(self) -> None:
+        """A disabled freshness check with no stale actions prints nothing."""
+        with console.capture() as capture:
+            warn_about_stale_actions([], 0)
+
+        assert capture.get() == ""
 
 
 class TestIgnoredChecks:
@@ -616,6 +657,59 @@ class TestIgnoredChecks:
 
         assert "1 override" in capture.get()
 
+    def test_summary_describes_applied_and_proposed_updates(self) -> None:
+        """The closing summary distinguishes dry-run proposals from applied rewrites."""
+        one = UpdateResult(
+            files_changed=1,
+            replacements=[Replacement(file=Path("a.yml"), line_number=1, old="old", new="new")],
+        )
+        two = UpdateResult(
+            files_changed=2,
+            replacements=[
+                Replacement(file=Path("a.yml"), line_number=1, old="old", new="new"),
+                Replacement(file=Path("b.yml"), line_number=2, old="older", new="newer"),
+            ],
+        )
+
+        with console.capture() as capture:
+            _print_summary(
+                update_result=one,
+                stale_actions=[],
+                node_version_violations=[],
+                ignored_checks=[],
+                overridden_settings=[],
+                dry_run=False,
+                exit_code=0,
+            )
+        assert "1 update applied" in capture.get()
+
+        with console.capture() as capture:
+            _print_summary(
+                update_result=two,
+                stale_actions=[GithubAction("actions/a", "v1"), GithubAction("actions/b", "v1")],
+                node_version_violations=[
+                    NodeVersionViolation(node_version=16, chain=("actions/old@v1",)),
+                    NodeVersionViolation(node_version=20, chain=("actions/other@v2",)),
+                ],
+                ignored_checks=[
+                    IgnoredCheck("actions/a", "max-age", "hint on uses: line"),
+                    IgnoredCheck("actions/b", "min-age", "hint on uses: line"),
+                ],
+                overridden_settings=[
+                    OverriddenSetting("actions/a", "max-age", "200 days (CLI: 150)"),
+                    OverriddenSetting("actions/b", "nodejs-version", "20 (CLI: 24)"),
+                ],
+                dry_run=True,
+                exit_code=3,
+            )
+        output = capture.get()
+        assert "2 updates proposed" in output
+        assert "2 stale tags" in output
+        assert "2 Node.js violations" in output
+        assert "2 ignored checks" in output
+        assert "2 overrides" in output
+        assert "exit 3" in output
+
 
 class TestOverriddenSettings:
     """Unit tests for inline override-hint collection and reporting."""
@@ -677,6 +771,23 @@ class TestOverriddenSettings:
 
         assert result == [OverriddenSetting("actions/checkout", "min-age", "min-age must be 0 or greater.")]
         assert "Invalid override 'min-age' on action 'actions/checkout'" in caplog.text
+
+    def test_collects_min_age_override(self) -> None:
+        """A min-age override is recapped in days against the CLI default."""
+        action = GithubAction(
+            "actions/checkout",
+            "v4",
+            comments=["v4", "gh-action-pulse: override[min-age=3]"],
+        )
+
+        result = collect_overridden_settings(
+            [action],
+            min_age=7,
+            max_age=150,
+            minimum_nodejs_version=24,
+        )
+
+        assert result == [OverriddenSetting("actions/checkout", "min-age", "3 days (CLI: 7)")]
 
     def test_report_prints_overridden_settings_table(self) -> None:
         """The override recap lists the action, setting, and applied value."""
