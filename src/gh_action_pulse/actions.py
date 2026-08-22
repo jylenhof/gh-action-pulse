@@ -25,7 +25,12 @@ from typing import TYPE_CHECKING, Literal
 import semver
 from github.GithubException import GithubException
 
-from gh_action_pulse.helpers.uses_line import ParsedIgnoreHint, parse_ignore_checks
+from gh_action_pulse.helpers.uses_line import (
+    ParsedIgnoreHint,
+    ParsedOverrideHint,
+    parse_ignore_checks,
+    parse_override_hints,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -39,7 +44,7 @@ if TYPE_CHECKING:
 
 
 @dataclass
-class ActualState:
+class ActualState:  # pylint: disable=too-many-instance-attributes
     """Metadata about the reference currently used in the project files."""
 
     reference: str
@@ -49,6 +54,7 @@ class ActualState:
     description_type: Literal["tag", "branch", "bullshit"] | None = None
     date: datetime.datetime | None = None
     ignore_hint: ParsedIgnoreHint = field(default_factory=ParsedIgnoreHint)
+    override_hint: ParsedOverrideHint = field(default_factory=ParsedOverrideHint)
 
 
 @dataclass
@@ -102,12 +108,33 @@ class GithubAction:
             description=actual_description,
             comments=comment_list,
             ignore_hint=parse_ignore_checks(comment_list),
+            override_hint=parse_override_hints(comment_list),
         )
         self.recommended = Recommendation()
 
     def ignores(self, check: str) -> bool:
         """Return True when this uses-line asked to skip the named check."""
         return check in self.actual.ignore_hint.checks
+
+    def override(self, check: str) -> int | None:
+        """Return the per-line override for a check id, or None when unset."""
+        return self.actual.override_hint.values.get(check)
+
+    def effective_max_age(self, default: int) -> int:
+        """Return the max-age threshold for this line after ignore/override hints."""
+        if self.ignores("max-age"):
+            return 0
+        if (value := self.override("max-age")) is not None:
+            return value
+        return default
+
+    def effective_nodejs_version(self, default: int) -> int:
+        """Return the Node.js minimum for this line after ignore/override hints."""
+        if self.ignores("nodejs-version"):
+            return 0
+        if (value := self.override("nodejs-version")) is not None:
+            return value
+        return default
 
     def __hash__(self) -> int:
         """Return a hash based on the action name, reference, description, and comments."""
@@ -141,6 +168,8 @@ class GithubAction:
         self.min_age = min_age
         if self.ignores("min-age"):
             logger.debug("Skipping min-age wait for action '%s' due to ignore hint.", self.name)
+        elif (override := self.override("min-age")) is not None:
+            logger.debug("Using min-age override of %d days for action '%s'.", override, self.name)
         self._set_actual_reference_type_and_date()
         logger.debug("actual reference type is %s at date %s", self.actual.reference_type, self.actual.date)
         self._set_actual_description_type()
@@ -414,9 +443,11 @@ class GithubAction:
         return None
 
     def _effective_min_age(self) -> int:
-        """Return the min-age wait for this line, or 0 when an ignore hint is present."""
+        """Return the min-age wait for this line after ignore/override hints."""
         if self.ignores("min-age"):
             return 0
+        if (value := self.override("min-age")) is not None:
+            return value
         return self.min_age
 
     def _apply_tag_recommendation(self, tag: Tag, cutoff: datetime.datetime) -> None:

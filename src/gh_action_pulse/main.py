@@ -37,6 +37,7 @@ from gh_action_pulse.full_list_of_existing_actions import FullListOfExistingActi
 from gh_action_pulse.helpers.console import console, error, format_status_with_ignored, phase_status
 from gh_action_pulse.helpers.constants import (
     ALLOWED_IGNORE_CHECKS,
+    ALLOWED_OVERRIDE_KEYS,
     ARCHIVED_ACTION_ERROR_EXIT_CODE,
     DEFAULT_MAX_AGE,
     DEFAULT_MIN_AGE,
@@ -81,6 +82,15 @@ class UpdateResult:
 @dataclass(frozen=True)
 class IgnoredCheck:
     """A per-action check skipped because of an inline ignore hint."""
+
+    action: str
+    check: str
+    detail: str
+
+
+@dataclass(frozen=True)
+class OverriddenSetting:
+    """A per-action threshold taken from an inline override hint."""
 
     action: str
     check: str
@@ -179,11 +189,14 @@ def check_node_versions(
     minimum_nodejs_version: int,
 ) -> list[NodeVersionViolation]:
     """Run the recursive Node.js version check on recommended references and report violations."""
-    if minimum_nodejs_version <= 0:
+    actions = uniq_github_actions.get_actions()
+    if minimum_nodejs_version <= 0 and not any(
+        not action.ignores("nodejs-version") and (value := action.override("nodejs-version")) is not None and value > 0
+        for action in actions
+    ):
         return []
     checker = NodeVersionChecker(g, minimum_nodejs_version)
     started = time.perf_counter()
-    actions = uniq_github_actions.get_actions()
     ignored_count = sum(1 for action in actions if action.ignores("nodejs-version"))
     violations = checker.check_actions(actions)
     report_node_version_violations(
@@ -321,6 +334,46 @@ def collect_ignored_checks(
     return ignored
 
 
+def collect_overridden_settings(
+    actions: list[GithubAction],
+    *,
+    min_age: int,
+    max_age: int,
+    minimum_nodejs_version: int,
+) -> list[OverriddenSetting]:
+    """Build the recap of applied override hints and invalid assignments."""
+    overridden: list[OverriddenSetting] = []
+    allowed = ", ".join(sorted(ALLOWED_OVERRIDE_KEYS))
+    defaults = {"max-age": max_age, "min-age": min_age, "nodejs-version": minimum_nodejs_version}
+    for action in sorted(actions, key=lambda item: (item.name, item.actual.reference)):
+        hint = action.actual.override_hint
+        for check in ("max-age", "min-age", "nodejs-version"):
+            if (value := hint.values.get(check)) is None or action.ignores(check):
+                continue
+            if check == "nodejs-version":
+                detail = f"{value} (CLI: {defaults[check]})"
+            else:
+                detail = f"{value} days (CLI: {defaults[check]})"
+            overridden.append(OverriddenSetting(action.name, check, detail))
+        for unknown in sorted(hint.unknown):
+            overridden.append(OverriddenSetting(action.name, unknown, f"unknown override key (allowed: {allowed})"))
+            logger.warning(
+                "Unknown override key '%s' on action '%s'; allowed values are: %s.",
+                unknown,
+                action.name,
+                allowed,
+            )
+        for raw_key, reason in hint.invalid:
+            overridden.append(OverriddenSetting(action.name, raw_key, reason))
+            logger.warning(
+                "Invalid override '%s' on action '%s': %s",
+                raw_key,
+                action.name,
+                reason,
+            )
+    return overridden
+
+
 def report_ignored_checks(ignored_checks: list[IgnoredCheck]) -> None:
     """Display checks skipped because of inline ignore hints."""
     ignored_list = list(ignored_checks)
@@ -336,6 +389,20 @@ def report_ignored_checks(ignored_checks: list[IgnoredCheck]) -> None:
     console.print(table)
 
 
+def report_overridden_settings(overridden_settings: list[OverriddenSetting]) -> None:
+    """Display per-line threshold overrides from inline hints."""
+    if not overridden_settings:
+        return
+
+    table = Table(title="Overridden settings", show_header=True, header_style="cyan")
+    table.add_column("Action")
+    table.add_column("Setting")
+    table.add_column("Detail")
+    for item in overridden_settings:
+        table.add_row(item.action, Text(item.check), item.detail)
+    console.print(table)
+
+
 def warn_about_stale_actions(
     stale_actions: list[GithubAction],
     max_age: int,
@@ -344,7 +411,7 @@ def warn_about_stale_actions(
     elapsed: float | None = None,
 ) -> None:
     """Log warnings for actions whose min-age eligible tag exceeds the freshness threshold."""
-    if max_age <= 0:
+    if max_age <= 0 and not stale_actions:
         return
 
     if not stale_actions:
@@ -362,28 +429,33 @@ def warn_about_stale_actions(
         elapsed=elapsed,
     )
 
-    table = Table(title=f"Stale tags (max-age {max_age} days)", show_header=True, header_style="yellow")
+    table = Table(
+        title=f"Stale tags (max-age {max_age} days)" if max_age > 0 else "Stale tags",
+        show_header=True,
+        header_style="yellow",
+    )
     table.add_column("Action")
     table.add_column("Detail")
 
     for action in stale_actions:
+        limit = action.effective_max_age(max_age)
         if not action.has_semver_tags:
-            detail = f"No semver tag found; cannot verify freshness within {max_age} days."
+            detail = f"No semver tag found; cannot verify freshness within {limit} days."
             table.add_row(action.name, detail)
             logger.warning(
                 "No semver tag found for action '%s'; cannot verify tag freshness within %d days.",
                 action.name,
-                max_age,
+                limit,
             )
         elif action.min_age_tag_date is not None:
             age_days = (datetime.datetime.now(datetime.UTC) - action.min_age_tag_date.astimezone(datetime.UTC)).days
-            detail = f"{age_days} days old (limit: {max_age} days)"
+            detail = f"{age_days} days old (limit: {limit} days)"
             table.add_row(action.name, detail)
             logger.error(
                 "Min-age eligible tag for action '%s' is %d days old (limit: %d days).",
                 action.name,
                 age_days,
-                max_age,
+                limit,
             )
     console.print(table)
 
@@ -394,6 +466,7 @@ def _print_summary(  # noqa: PLR0913
     stale_actions: list[GithubAction],
     node_version_violations: list[NodeVersionViolation],
     ignored_checks: list[IgnoredCheck],
+    overridden_settings: list[OverriddenSetting],
     dry_run: bool,
     exit_code: int,
 ) -> None:
@@ -414,6 +487,8 @@ def _print_summary(  # noqa: PLR0913
         )
     if ignored_checks:
         parts.append(f"{len(ignored_checks)} ignored check{'s' if len(ignored_checks) != 1 else ''}")
+    if overridden_settings:
+        parts.append(f"{len(overridden_settings)} override{'s' if len(overridden_settings) != 1 else ''}")
 
     parts.append(f"exit {exit_code}")
     border = "green" if exit_code == 0 else "red"
@@ -523,6 +598,7 @@ def main(
             stale_actions=[],
             node_version_violations=[],
             ignored_checks=[],
+            overridden_settings=[],
             dry_run=dry_run,
             exit_code=ARCHIVED_ACTION_ERROR_EXIT_CODE,
         )
@@ -552,6 +628,14 @@ def main(
     )
     report_ignored_checks(ignored_checks)
 
+    overridden_settings = collect_overridden_settings(
+        list(uniq_github_actions.get_actions()),
+        min_age=min_age_in_days,
+        max_age=max_age_in_days,
+        minimum_nodejs_version=minimum_nodejs_version,
+    )
+    report_overridden_settings(overridden_settings)
+
     update_result = apply_recommended_updates(results, uniq_github_actions, dry_run=dry_run)
 
     if node_version_violations:
@@ -560,6 +644,7 @@ def main(
             stale_actions=stale_actions,
             node_version_violations=node_version_violations,
             ignored_checks=ignored_checks,
+            overridden_settings=overridden_settings,
             dry_run=dry_run,
             exit_code=NODEJS_VERSION_ERROR_EXIT_CODE,
         )
@@ -571,6 +656,7 @@ def main(
             stale_actions=stale_actions,
             node_version_violations=node_version_violations,
             ignored_checks=ignored_checks,
+            overridden_settings=overridden_settings,
             dry_run=dry_run,
             exit_code=STALE_TAG_ERROR_EXIT_CODE,
         )
@@ -581,6 +667,7 @@ def main(
         stale_actions=stale_actions,
         node_version_violations=node_version_violations,
         ignored_checks=ignored_checks,
+        overridden_settings=overridden_settings,
         dry_run=dry_run,
         exit_code=0,
     )

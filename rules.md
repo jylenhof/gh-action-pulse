@@ -50,6 +50,13 @@ line applies to that action (quoted ids such as `ignore["max-age"]` are also acc
 `ignore[min-age]` recommends the newest SemVer tag without waiting for `min_age`.
 Unknown check ids are reported and do not skip a check.
 
+A `gh-action-pulse: override[max-age=200]`, `override[min-age=3]`, and/or
+`override[nodejs-version=20]` hint on that line changes the matching threshold
+(quoted assignments such as `override["max-age"=200]` are also accepted).
+Several assignments can be comma-separated inside the brackets.
+`ignore[...]` for the same check on the same line takes precedence.
+Unknown keys and out-of-range values are reported and not applied.
+
 action@sha # tag # extra
 => sha of newest semver tag meeting `min_age` and >= pinned tag, preserving extra comments
 
@@ -62,3 +69,9 @@ action@sha # tag # gh-action-pulse: ignore[max-age]
 
 action@sha # tag # gh-action-pulse: ignore[min-age]
 => sha of newest semver tag >= pinned tag, without waiting for `min_age`
+
+action@sha # tag # gh-action-pulse: override[max-age=200]
+=> same recommendation as `action@sha # tag`, with the max-age freshness limit set to 200 days
+
+action@sha # tag # gh-action-pulse: override[min-age=3]
+=> sha of newest semver tag meeting a 3-day wait and >= pinned tag

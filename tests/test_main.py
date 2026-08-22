@@ -36,13 +36,16 @@ from gh_action_pulse.helpers.constants import (
 )
 from gh_action_pulse.main import (
     IgnoredCheck,
+    OverriddenSetting,
     UpdateResult,
     _print_summary,
     app,
     apply_recommended_updates,
     check_node_versions,
     collect_ignored_checks,
+    collect_overridden_settings,
     report_ignored_checks,
+    report_overridden_settings,
     validate_max_age,
     validate_max_age_cli,
     validate_min_age,
@@ -138,12 +141,39 @@ class TestCheckNodeVersions:
     """Unit tests for the Node.js version orchestration helper."""
 
     def test_disabled_when_minimum_is_zero(self) -> None:
-        """A minimum of 0 skips the recursive Node.js check entirely."""
+        """A minimum of 0 skips the recursive Node.js check when no line overrides it."""
         uniq = MagicMock()
+        uniq.get_actions.return_value = set()
 
         assert not check_node_versions(MagicMock(), uniq, 0)
 
-        uniq.get_actions.assert_not_called()
+        uniq.get_actions.assert_called_once()
+
+    @patch("gh_action_pulse.main.report_node_version_violations")
+    @patch("gh_action_pulse.main.NodeVersionChecker")
+    def test_runs_when_minimum_is_zero_but_override_is_present(
+        self,
+        mock_checker_cls: MagicMock,
+        mock_report: MagicMock,
+    ) -> None:
+        """A nodejs-version override re-enables the check for that line when the CLI minimum is 0."""
+        mock_checker = MagicMock()
+        mock_checker.check_actions.return_value = []
+        mock_checker_cls.return_value = mock_checker
+        overridden = GithubAction(
+            "actions/old",
+            "v1",
+            comments=["v1", "gh-action-pulse: override[nodejs-version=20]"],
+        )
+        uniq = MagicMock()
+        uniq.get_actions.return_value = {overridden}
+
+        result = check_node_versions(MagicMock(), uniq, 0)
+
+        assert not result
+        mock_checker_cls.assert_called_once()
+        mock_checker.check_actions.assert_called_once()
+        mock_report.assert_called_once()
 
     @patch("gh_action_pulse.main.report_node_version_violations")
     @patch("gh_action_pulse.main.NodeVersionChecker")
@@ -564,11 +594,107 @@ class TestIgnoredChecks:
                 stale_actions=[],
                 node_version_violations=[],
                 ignored_checks=[IgnoredCheck("actions/old", "max-age", "hint on uses: line")],
+                overridden_settings=[],
                 dry_run=True,
                 exit_code=0,
             )
 
         assert "1 ignored check" in capture.get()
+
+    def test_summary_includes_overrides(self) -> None:
+        """The closing summary mentions override hints when they were used."""
+        with console.capture() as capture:
+            _print_summary(
+                update_result=UpdateResult(),
+                stale_actions=[],
+                node_version_violations=[],
+                ignored_checks=[],
+                overridden_settings=[OverriddenSetting("actions/old", "max-age", "200 days (CLI: 150)")],
+                dry_run=True,
+                exit_code=0,
+            )
+
+        assert "1 override" in capture.get()
+
+
+class TestOverriddenSettings:
+    """Unit tests for inline override-hint collection and reporting."""
+
+    def test_collects_valid_overrides_and_unknown_keys(self, caplog: pytest.LogCaptureFixture) -> None:
+        """Known assignments are recapped; unknown keys are warned about."""
+        overridden = GithubAction(
+            "actions/old",
+            "v1",
+            "v1",
+            comments=["v1", "gh-action-pulse: override[max-age=200, nodejs-version=20]"],
+        )
+        unknown = GithubAction(
+            "actions/cache",
+            "v4",
+            comments=["gh-action-pulse: override[stale-days=10]"],
+        )
+        ignored = GithubAction(
+            "actions/checkout",
+            "v4",
+            comments=["v4", "gh-action-pulse: ignore[max-age]", "gh-action-pulse: override[max-age=200]"],
+        )
+        plain = GithubAction("actions/setup-python", "v5")
+
+        with caplog.at_level(logging.WARNING):
+            result = collect_overridden_settings(
+                [plain, overridden, unknown, ignored],
+                min_age=7,
+                max_age=150,
+                minimum_nodejs_version=24,
+            )
+
+        assert result == [
+            OverriddenSetting(
+                "actions/cache",
+                "stale-days",
+                "unknown override key (allowed: max-age, min-age, nodejs-version)",
+            ),
+            OverriddenSetting("actions/old", "max-age", "200 days (CLI: 150)"),
+            OverriddenSetting("actions/old", "nodejs-version", "20 (CLI: 24)"),
+        ]
+        assert "Unknown override key 'stale-days' on action 'actions/cache'" in caplog.text
+
+    def test_collects_invalid_override_values(self, caplog: pytest.LogCaptureFixture) -> None:
+        """Out-of-range assignments are recapped without being applied."""
+        action = GithubAction(
+            "actions/checkout",
+            "v4",
+            comments=["v4", "gh-action-pulse: override[min-age=-1]"],
+        )
+
+        with caplog.at_level(logging.WARNING):
+            result = collect_overridden_settings(
+                [action],
+                min_age=7,
+                max_age=150,
+                minimum_nodejs_version=24,
+            )
+
+        assert result == [OverriddenSetting("actions/checkout", "min-age", "min-age must be 0 or greater.")]
+        assert "Invalid override 'min-age' on action 'actions/checkout'" in caplog.text
+
+    def test_report_prints_overridden_settings_table(self) -> None:
+        """The override recap lists the action, setting, and applied value."""
+        with console.capture() as capture:
+            report_overridden_settings([OverriddenSetting("actions/old", "max-age", "200 days (CLI: 150)")])
+
+        output = capture.get()
+        assert "Overridden settings" in output
+        assert "actions/old" in output
+        assert "max-age" in output
+        assert "200 days (CLI: 150)" in output
+
+    def test_report_is_silent_when_empty(self) -> None:
+        """No override table is printed when nothing was overridden."""
+        with console.capture() as capture:
+            report_overridden_settings([])
+
+        assert capture.get() == ""
 
 
 class TestMainCommand:

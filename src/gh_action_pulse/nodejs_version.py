@@ -60,6 +60,7 @@ class NodeVersionViolation:
 
     node_version: int
     chain: tuple[str, ...]
+    minimum_version: int = 0
 
     @property
     def action(self) -> str:
@@ -94,7 +95,7 @@ class NodeVersionChecker:  # pylint: disable=too-few-public-methods
         self._minimum = minimum_version
         self._root = repo_root if repo_root is not None else Path.cwd()
         self._violations: list[NodeVersionViolation] = []
-        self._visited: set[tuple[str | None, str | None, str]] = set()
+        self._visited: set[tuple[str | None, str | None, str, int]] = set()
         self._repos: dict[str, Repository] = {}
 
     def check_actions(self, actions: Iterable[GithubAction]) -> list[NodeVersionViolation]:
@@ -126,10 +127,14 @@ class NodeVersionChecker:  # pylint: disable=too-few-public-methods
                     )
                     progress.advance(task_id)
                     continue
+                minimum = action.effective_nodejs_version(self._minimum)
+                if minimum <= 0:
+                    progress.advance(task_id)
+                    continue
                 target = self._recommended_target(action)
                 if target is not None:
                     location, action_dir, display = target
-                    self._walk(location, action_dir, display, ())
+                    self._walk(location, action_dir, display, (), minimum)
                 progress.advance(task_id)
         logger.debug(
             "Finished Node.js version check. Found %d action(s) below the minimum.\n",
@@ -155,17 +160,24 @@ class NodeVersionChecker:  # pylint: disable=too-few-public-methods
         )
         return _Location(repo_full_name=repo_full_name, ref=ref), action_dir, f"{full_name}@{label}"
 
-    def _resolve(self, target: str, location: _Location, chain: tuple[str, ...]) -> None:
+    def _resolve(self, target: str, location: _Location, chain: tuple[str, ...], minimum: int) -> None:
         """Resolve a single ``uses:`` reference, recursing into composite actions."""
         resolved = self._resolve_target(target, location)
         if resolved is None:
             return
         child_location, action_dir, display = resolved
-        self._walk(child_location, action_dir, display, chain)
+        self._walk(child_location, action_dir, display, chain, minimum)
 
-    def _walk(self, location: _Location, action_dir: str, display: str, chain: tuple[str, ...]) -> None:
+    def _walk(
+        self,
+        location: _Location,
+        action_dir: str,
+        display: str,
+        chain: tuple[str, ...],
+        minimum: int,
+    ) -> None:
         """Load a resolved action manifest and process its ``runs`` block, recursing on composites."""
-        key = (location.repo_full_name, location.ref, action_dir)
+        key = (location.repo_full_name, location.ref, action_dir, minimum)
         if key in self._visited:
             return
         self._visited.add(key)
@@ -178,16 +190,18 @@ class NodeVersionChecker:  # pylint: disable=too-few-public-methods
 
         runs = manifest.get("runs")
         if isinstance(runs, dict):
-            self._process_runs(runs, location, new_chain)
+            self._process_runs(runs, location, new_chain, minimum)
 
-    def _process_runs(self, runs: dict, location: _Location, chain: tuple[str, ...]) -> None:
+    def _process_runs(self, runs: dict, location: _Location, chain: tuple[str, ...], minimum: int) -> None:
         """Inspect a manifest ``runs`` block, recording node violations or recursing on composites."""
         using = str(runs.get("using", "")).strip()
 
         if node_match := _NODE_USING_RE.fullmatch(using):
             version = int(node_match.group(1))
-            if version < self._minimum:
-                self._violations.append(NodeVersionViolation(node_version=version, chain=chain))
+            if version < minimum:
+                self._violations.append(
+                    NodeVersionViolation(node_version=version, chain=chain, minimum_version=minimum)
+                )
             return
 
         if using.casefold() != "composite":
@@ -197,7 +211,7 @@ class NodeVersionChecker:  # pylint: disable=too-few-public-methods
         if isinstance(steps, list):
             for step in steps:
                 if isinstance(step, dict) and (step_uses := step.get("uses")):
-                    self._resolve(str(step_uses), location, chain)
+                    self._resolve(str(step_uses), location, chain, minimum)
 
     def _resolve_target(
         self,
@@ -320,7 +334,7 @@ def report_node_version_violations(
             "Action '%s' runs on Node.js %d which is below the required minimum of %d (dependency chain: %s).",
             violation.action,
             violation.node_version,
-            minimum_version,
+            violation.minimum_version or minimum_version,
             violation.format_chain(),
         )
     console.print(table)
