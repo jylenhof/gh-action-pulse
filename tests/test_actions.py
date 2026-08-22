@@ -1259,3 +1259,110 @@ class TestGithubAction:
         action.min_age_tag_date = None
 
         assert action.is_tag_fresh(150) is False
+
+    @patch("gh_action_pulse.actions.GithubAction._get_valid_semver_tags")
+    @patch("gh_action_pulse.actions.GithubAction._set_recommended_for_sha")
+    def test__set_recommended_reference_and_date_raises_when_description_missing(
+        self,
+        mock__set_recommended_for_sha: MagicMock,
+        mock__get_valid_semver_tags: MagicMock,
+    ) -> None:
+        """A missing recommended description is treated as an internal error."""
+        action = GithubAction("actions/checkout", "abc123")
+        action.actual.reference_type = "sha"
+        mock__get_valid_semver_tags.return_value = []
+
+        def set_recommendation(_tags: list) -> None:
+            action.recommended.reference = "def456"
+            action.recommended.description = None
+
+        mock__set_recommended_for_sha.side_effect = set_recommendation
+
+        with pytest.raises(ValueError, match="Recommended description is None"):
+            action._set_recommended_reference_and_date()
+
+    @patch("gh_action_pulse.actions.GithubAction._set_recommended_with_fallback")
+    def test__set_recommended_for_sha_branch_without_description_is_skipped(
+        self, mock__set_recommended_with_fallback: MagicMock
+    ) -> None:
+        """A SHA described as a branch without a name cannot fall back to a branch tip."""
+        action = GithubAction("actions/checkout", "sha-for-main")
+        action.actual.description_type = "branch"
+
+        action._set_recommended_for_sha([])
+
+        mock__set_recommended_with_fallback.assert_not_called()
+        assert action.recommended.reference is None
+
+    def test__actual_sha_matches_tag_returns_false_when_commit_lookup_fails(self) -> None:
+        """Unresolved SHAs are not treated as tag-related."""
+        action = GithubAction("actions/checkout", "deadbeef")
+        action.actual.reference_type = "sha"
+        mock_repo = MagicMock()
+        mock_repo.get_commit.side_effect = GithubException(404, "Not Found", None)
+        action.repo = mock_repo
+
+        assert action._actual_sha_matches_tag() is False
+        mock_repo.get_tags.assert_not_called()
+
+    def test__set_recommended_to_latest_related_branch_skips_uncomparable_branches(self) -> None:
+        """Branches that cannot be compared against the pinned SHA are ignored."""
+        action = GithubAction("actions/checkout", "sha-old")
+        mock_repo = MagicMock()
+        mock_ok = MagicMock()
+        mock_ok.name = "main"
+        mock_ok.commit.sha = "sha-new"
+        mock_ok.commit.commit.committer.date = datetime.datetime(2026, 1, 3, tzinfo=datetime.UTC)
+        mock_bad = MagicMock()
+        mock_bad.name = "broken"
+        mock_bad.commit.sha = "sha-broken"
+        mock_repo.get_branches.return_value = [mock_bad, mock_ok]
+        mock_repo.get_branch.return_value = mock_ok
+
+        def compare_side_effect(_base: str, head: str) -> MagicMock:
+            if head == "sha-broken":
+                raise GithubException(404, "Not Found", None)
+            comparison = MagicMock()
+            comparison.status = "identical"
+            return comparison
+
+        mock_repo.compare.side_effect = compare_side_effect
+        action.repo = mock_repo
+
+        action._set_recommended_to_latest_related_branch()
+
+        assert action.recommended.description == "main"
+        mock_repo.get_branch.assert_called_once_with("main")
+
+    @log_capture()
+    def test__set_recommended_to_latest_related_branch_with_repo_error(self, capture: LogCapture) -> None:
+        """A repository-level branch listing failure is logged without a recommendation."""
+        action = GithubAction("actions/checkout", "sha-old")
+        mock_repo = MagicMock()
+        mock_repo.get_branches.side_effect = GithubException(500, "Boom", None)
+        action.repo = mock_repo
+
+        action._set_recommended_to_latest_related_branch()
+
+        assert action.recommended.reference is None
+        capture.check(
+            (
+                "gh_action_pulse.actions",
+                "ERROR",
+                "Failed to find branches related to commit 'sha-old' for action 'actions/checkout'.",
+            )
+        )
+
+    def test__set_recommended_reference_and_date_to_tag_if_exists_unknown_pinned_version(self) -> None:
+        """A pinned semver that is missing from the tag list does not force a recommendation."""
+        action = GithubAction("actions/checkout", "v9.0.0")
+        action.actual.reference_type = "tag"
+        action.min_age = 30
+        mock_tag_v4 = MagicMock()
+        mock_tag_v4.name = "v4.0.0"
+        mock_tag_v4.commit.sha = "sha-for-v4"
+        mock_tag_v4.commit.commit.committer.date = datetime.datetime(2026, 1, 3, tzinfo=datetime.UTC)
+
+        action._set_recommended_reference_and_date_to_tag_if_exists([mock_tag_v4])
+
+        assert action.recommended.reference is None
