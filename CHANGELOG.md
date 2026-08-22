@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.4.0](https://github.com/jylenhof/gh-action-pulse/compare/v1.3.0...v1.4.0) (2026-08-22)
+
+
+### Features
+
+* honor per-line override hints on uses lines ([#173](https://github.com/jylenhof/gh-action-pulse/issues/173)) ([5e33374](https://github.com/jylenhof/gh-action-pulse/commit/5e33374082179246d88f9a5f1a184272cbcb724c))
+
 ## [1.3.0](https://github.com/jylenhof/gh-action-pulse/compare/v1.2.0...v1.3.0) (2026-08-21)
 
 
