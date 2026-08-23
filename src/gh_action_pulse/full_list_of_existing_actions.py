@@ -16,8 +16,9 @@
 """Model representing an existing GitHub Action in a repository."""
 
 import logging
-import re
 from pathlib import Path
+
+from gh_action_pulse.helpers.uses_line import UsesOccurrence, parse_uses_line
 
 logger = logging.getLogger(__name__)
 
@@ -27,7 +28,7 @@ class FullListOfExistingActions:
 
     def __init__(self, search_configs: list[tuple[Path, str]]) -> None:
         """Initialize the model and scan for 'uses:' statements."""
-        self._full_list: dict[Path, list[dict[int, str]]] = {}
+        self._full_list: dict[Path, list[UsesOccurrence]] = {}
         logger.debug("Scanning for 'uses:' statements in specified directories...")
         self._scan_for_actions(search_configs)
         logger.debug(
@@ -37,18 +38,20 @@ class FullListOfExistingActions:
     def _scan_for_actions(self, search_configs: list[tuple[Path, str]]) -> None:
         """Internal method to scan files based on provided configurations."""
         for directory, glob_pat in search_configs:
-            regex_pattern: re.Pattern[str] = re.compile(pattern=r"^ *-{0,1} {0,1}uses:")
             for file_path in Path(directory).glob(pattern=glob_pat):
                 logger.debug("Scanning file: %s", file_path)
-                matches: list[dict[int, str]] = []
+                matches: list[UsesOccurrence] = []
                 try:
                     with file_path.open(encoding="utf-8") as f:
                         for line_num, line in enumerate(iterable=f, start=1):
-                            if re.match(pattern=regex_pattern, string=line):
+                            if occurrence := parse_uses_line(line, file=file_path, line_number=line_num):
                                 logger.debug(
-                                    "Found action in file %s at line %d: %s", file_path, line_num, line.strip()
+                                    "Found action in file %s at line %d: %s",
+                                    file_path,
+                                    line_num,
+                                    occurrence.raw_line,
                                 )
-                                matches.append({line_num: line.strip()})
+                                matches.append(occurrence)
                 except OSError, UnicodeDecodeError:
                     logger.exception("Could not read file %s", file_path)
                     continue
@@ -59,6 +62,6 @@ class FullListOfExistingActions:
         """Return the number of files containing actions."""
         return len(self._full_list)
 
-    def get_results(self) -> dict[Path, list[dict[int, str]]]:
+    def get_results(self) -> dict[Path, list[UsesOccurrence]]:
         """Return the dictionary of found actions."""
         return self._full_list

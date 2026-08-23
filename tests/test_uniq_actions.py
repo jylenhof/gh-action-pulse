@@ -22,7 +22,14 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from gh_action_pulse.actions import GithubAction, GithubActionNotFoundError
+from gh_action_pulse.helpers.uses_line import UsesOccurrence, parse_uses_line
 from gh_action_pulse.uniq_actions import UniqGithubActions
+
+
+def _occurrence(raw_line: str, path: str = "test.yml", line_number: int = 1) -> UsesOccurrence:
+    parsed = parse_uses_line(raw_line, file=Path(path), line_number=line_number)
+    assert parsed is not None
+    return parsed
 
 
 class TestUniqGithubActions:
@@ -64,12 +71,12 @@ class TestUniqGithubActions:
         """Verify initialization from a full action list populates unique actions."""
         full_list = {
             Path("test_actions.yml"): [
-                {10: "uses: actions/checkout@v4.0.0 # v4.0.0"},
-                {15: "- uses: some-owner/some-repo@master"},
+                _occurrence("uses: actions/checkout@v4.0.0 # v4.0.0", path="test_actions.yml", line_number=10),
+                _occurrence("- uses: some-owner/some-repo@master", path="test_actions.yml", line_number=15),
             ],
             Path("another_file.yaml"): [
-                {5: "uses: actions/setup-python@v5"},
-                {25: "uses: actions/checkout@v4.0.0 # v4.0.0"},
+                _occurrence("uses: actions/setup-python@v5", path="another_file.yaml", line_number=5),
+                _occurrence("uses: actions/checkout@v4.0.0 # v4.0.0", path="another_file.yaml", line_number=25),
             ],
         }
         uniq = UniqGithubActions()
@@ -84,9 +91,12 @@ class TestUniqGithubActions:
         """Verify only the first trailing comment is stored as the action description."""
         full_list = {
             Path("test.yml"): [
-                {1: "uses: actions/checkout@abc123 # v4.2.2 # extra note"},
-                {2: ("uses: actions/setup-python@def456 # v5.0.0 # gh-action-pulse: ignore[max-days]")},
-                {3: "uses: actions/cache@ghi789 # gh-action-pulse: ignore[max-days]"},
+                _occurrence("uses: actions/checkout@abc123 # v4.2.2 # extra note"),
+                _occurrence(
+                    "uses: actions/setup-python@def456 # v5.0.0 # gh-action-pulse: ignore[max-days]",
+                    line_number=2,
+                ),
+                _occurrence("uses: actions/cache@ghi789 # gh-action-pulse: ignore[max-days]", line_number=3),
             ]
         }
         uniq = UniqGithubActions()
@@ -102,19 +112,6 @@ class TestUniqGithubActions:
         cache = uniq.get_item("actions/cache", "ghi789", "gh-action-pulse: ignore[max-days]")
         assert cache.actual.description == "gh-action-pulse: ignore[max-days]"
         assert cache.actual.comments == ["gh-action-pulse: ignore[max-days]"]
-
-    def test_init_from_full_list_with_mixed_content(self) -> None:
-        """Verify that valid actions are parsed and invalid ones (like local actions) are skipped."""
-        full_list = {
-            Path("test.yml"): [
-                {1: "uses: actions/checkout@v4"},  # Valid: matches regex
-                {2: "uses: ./local-action"},  # Invalid: missing @, should be skipped
-            ]
-        }
-        uniq = UniqGithubActions()
-        uniq.init_from_full_list(full_list)
-        # Covers the False branch of the regex match and ensures line 245 is hit for the valid one
-        assert len(uniq.get_actions()) == 1
 
     def test_init_from_full_list_empty(self) -> None:
         """Verify that initialization with an empty list handles the loop exit branches correctly."""
