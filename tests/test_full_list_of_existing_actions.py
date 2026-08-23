@@ -20,6 +20,7 @@ from typing import TYPE_CHECKING
 from unittest.mock import patch
 
 from gh_action_pulse.full_list_of_existing_actions import FullListOfExistingActions
+from gh_action_pulse.helpers.uses_line import UsesOccurrence
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -65,15 +66,42 @@ def test_full_list_of_existing__scan_for_actions(tmp_path: Path) -> None:
     assert file1 in results
     assert file2 in results
 
-    # Verify line numbers and stripped content for file1
+    # Verify line numbers and parsed uses-line fields for file1
     # Line 5:       - uses: actions/checkout@v4
     # Line 6:       - uses: actions/setup-python@v5
-    assert len(results[file1]) == 2
-    assert results[file1][0] == {5: "- uses: actions/checkout@v4"}
-    assert results[file1][1] == {6: "- uses: actions/setup-python@v5"}
+    assert results[file1] == [
+        UsesOccurrence(
+            file=file1,
+            line_number=5,
+            raw_line="      - uses: actions/checkout@v4",
+            name="actions/checkout",
+            reference="v4",
+            description=None,
+            comments=[],
+        ),
+        UsesOccurrence(
+            file=file1,
+            line_number=6,
+            raw_line="      - uses: actions/setup-python@v5",
+            name="actions/setup-python",
+            reference="v5",
+            description=None,
+            comments=[],
+        ),
+    ]
 
     # Verify file2
-    assert results[file2][0] == {6: "uses: charliermarsh/ruff-action@v1"}
+    assert results[file2] == [
+        UsesOccurrence(
+            file=file2,
+            line_number=6,
+            raw_line="        uses: charliermarsh/ruff-action@v1",
+            name="charliermarsh/ruff-action",
+            reference="v1",
+            description=None,
+            comments=[],
+        )
+    ]
 
 
 def test_full_list_of_existing__os_error(tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
@@ -127,3 +155,48 @@ def test_full_list_of_existing__len(tmp_path: Path) -> None:
     scanner = FullListOfExistingActions(search_configs)
 
     assert len(scanner) == 2
+
+
+def test_full_list_skips_local_and_docker_refs_without_at(tmp_path: Path) -> None:
+    """Docker and local `./` refs that fail the `@` pattern drop out at scan time."""
+    workflow_dir: Path = tmp_path / ".github" / "workflows"
+    workflow_dir.mkdir(parents=True)
+    file1: Path = workflow_dir / "ci.yml"
+    file1.write_text(
+        "jobs:\n"
+        "  build:\n"
+        "    steps:\n"
+        "      - uses: actions/checkout@v4\n"
+        "      - uses: ./local-action\n"
+        "      - uses: docker://alpine:3.8\n"
+        "      - uses: ./.github/actions/foo\n"
+    )
+
+    scanner = FullListOfExistingActions([(workflow_dir, "*.yml")])
+    results = scanner.get_results()
+
+    assert results[file1] == [
+        UsesOccurrence(
+            file=file1,
+            line_number=4,
+            raw_line="      - uses: actions/checkout@v4",
+            name="actions/checkout",
+            reference="v4",
+            description=None,
+            comments=[],
+        )
+    ]
+
+
+def test_full_list_parses_trailing_comments_at_scan_time(tmp_path: Path) -> None:
+    """Trailing comments are split during scan so later stages can use them as-is."""
+    workflow_dir: Path = tmp_path / ".github" / "workflows"
+    workflow_dir.mkdir(parents=True)
+    file1: Path = workflow_dir / "ci.yml"
+    file1.write_text("- uses: actions/checkout@abc123 # v4.2.2 # extra note\n")
+
+    scanner = FullListOfExistingActions([(workflow_dir, "*.yml")])
+    results = scanner.get_results()
+
+    assert results[file1][0].description == "v4.2.2"
+    assert results[file1][0].comments == ["v4.2.2", "extra note"]
