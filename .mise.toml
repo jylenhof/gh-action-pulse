@@ -6,7 +6,7 @@ action-validator = "0.9.0"
 actionlint = "1.7.12"
 editorconfig-checker = "3.11.1"
 ghalint = "1.5.6"
-pinact = "4.1.0"
+pinact = "4.1.1"
 # "pipx:gh-action-pulse" = { version = "latest", uvx = true }
 prek = "0.4.13"
 rumdl = "0.2.60"
