@@ -104,8 +104,7 @@ repos:
         files: '(\.github/actions/.*/action\.ya?ml|action\.ya?ml)$'
       - id: zizmor
         name: zizmor
-        # limit scope because of bug: https://github.com/zizmorcore/zizmor/issues/2258
-        entry: "zizmor . --collect workflows,actions,dependabot"
+        entry: "zizmor ."
         language: system
         files: '(\.github/(workflows/.*|actions/.*/action|dependabot\.ya?ml))|(action\.ya?ml)$'
         pass_filenames: false
