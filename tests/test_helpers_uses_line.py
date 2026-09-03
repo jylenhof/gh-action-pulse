@@ -15,11 +15,15 @@
 
 """Tests for uses-line parsing helpers."""
 
+from pathlib import Path
+
 from gh_action_pulse.helpers.uses_line import (
     USES_LINE_PATTERN,
     parse_ignore_checks,
     parse_override_hints,
     parse_trailing_comments,
+    parse_uses_line,
+    rewrite_uses_line,
 )
 
 
@@ -121,11 +125,12 @@ class TestUsesLineHelpers:
         assert too_large.invalid == (("min-age", "min-age cannot exceed 60 days."),)
 
     def test_matches_uses_line_with_multiple_comments(self) -> None:
-        """Named groups capture the action, reference, and raw trailing comments."""
+        """Named groups capture the prefix, action, reference, and raw trailing comments."""
         match = USES_LINE_PATTERN.search(
             "        uses: actions/checkout@abc123 # v4.2.2 # gh-action-pulse: ignore[max-days]"
         )
         assert match is not None
+        assert match.group("prefix") == "        uses: "
         assert match.group("name") == "actions/checkout"
         assert match.group("reference") == "abc123"
         assert match.group("comments") == "v4.2.2 # gh-action-pulse: ignore[max-days]"
@@ -133,3 +138,42 @@ class TestUsesLineHelpers:
     def test_skips_local_action_without_reference(self) -> None:
         """Local `./` actions without `@` are not uses-line matches."""
         assert USES_LINE_PATTERN.search("uses: ./local-action") is None
+
+    def test_skips_docker_ref_without_at(self) -> None:
+        """Docker image refs without `@` are not uses-line matches."""
+        assert USES_LINE_PATTERN.search("uses: docker://alpine:3.8") is None
+
+    def test_parse_uses_line_returns_occurrence(self) -> None:
+        """Scan-time parse fills UsesOccurrence so later stages do not re-parse the line."""
+        workflow = Path("ci.yml")
+        occurrence = parse_uses_line(
+            "      - uses: actions/checkout@abc123 # v4.2.2 # extra\n",
+            file=workflow,
+            line_number=7,
+        )
+        assert occurrence is not None
+        assert occurrence.file == workflow
+        assert occurrence.line_number == 7
+        assert occurrence.raw_line == "      - uses: actions/checkout@abc123 # v4.2.2 # extra"
+        assert occurrence.name == "actions/checkout"
+        assert occurrence.reference == "abc123"
+        assert occurrence.description == "v4.2.2"
+        assert occurrence.comments == ["v4.2.2", "extra"]
+
+    def test_parse_uses_line_rejects_local_and_docker_refs(self) -> None:
+        """Refs that fail the `@` pattern drop out at scan time."""
+        workflow = Path("ci.yml")
+        assert parse_uses_line("uses: ./local-action", file=workflow, line_number=1) is None
+        assert parse_uses_line("uses: docker://alpine:3.8", file=workflow, line_number=2) is None
+
+    def test_rewrite_uses_line_preserves_prefix_from_shared_pattern(self) -> None:
+        """Rewrite keeps the indent/dash/`uses:` prefix captured by USES_LINE_PATTERN."""
+        original = "      - uses: actions/checkout@v4\n"
+        assert rewrite_uses_line(original, "actions/checkout@abc123 # v4.2.0") == (
+            "      - uses: actions/checkout@abc123 # v4.2.0\n"
+        )
+
+    def test_rewrite_uses_line_leaves_non_matching_lines_unchanged(self) -> None:
+        """Lines that are not `name@ref` uses-lines are not rewritten."""
+        original = "name: Example\n"
+        assert rewrite_uses_line(original, "actions/checkout@v4") == original

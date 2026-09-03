@@ -35,6 +35,7 @@ from gh_action_pulse.helpers.constants import (
     NODEJS_VERSION_ERROR_EXIT_CODE,
     STALE_TAG_ERROR_EXIT_CODE,
 )
+from gh_action_pulse.helpers.uses_line import UsesOccurrence, parse_uses_line
 from gh_action_pulse.main import (
     IgnoredCheck,
     OverriddenSetting,
@@ -64,6 +65,16 @@ if TYPE_CHECKING:
     from collections.abc import Iterator
 
 runner = CliRunner()
+
+
+def _occurrence(file: Path, line_number: int, raw_line: str) -> UsesOccurrence:
+    parsed = parse_uses_line(raw_line, file=file, line_number=line_number)
+    assert parsed is not None
+    return parsed
+
+
+def _scan(workflow: Path, original: str) -> dict[Path, list[UsesOccurrence]]:
+    return {workflow: [_occurrence(workflow, 1, original.rstrip("\n"))]}
 
 
 class TestValidateCliOptions:
@@ -262,7 +273,7 @@ class TestApplyRecommendedUpdates:
         uniq = UniqGithubActions()
         uniq.add(action)
 
-        apply_recommended_updates({workflow: [{1: original.rstrip("\n")}]}, uniq, dry_run=True)
+        apply_recommended_updates(_scan(workflow, original), uniq, dry_run=True)
 
         assert workflow.read_text(encoding="utf-8") == original
 
@@ -279,7 +290,7 @@ class TestApplyRecommendedUpdates:
         uniq = UniqGithubActions()
         uniq.add(action)
 
-        apply_recommended_updates({workflow: [{1: original.rstrip("\n")}]}, uniq, dry_run=False)
+        apply_recommended_updates(_scan(workflow, original), uniq, dry_run=False)
 
         updated = workflow.read_text(encoding="utf-8")
         assert updated == "- uses: actions/checkout@abc123 # v4.2.0\n"
@@ -294,7 +305,7 @@ class TestApplyRecommendedUpdates:
         uniq = UniqGithubActions()
         uniq.add(action)
 
-        apply_recommended_updates({workflow: [{1: original.rstrip("\n")}]}, uniq, dry_run=False)
+        apply_recommended_updates(_scan(workflow, original), uniq, dry_run=False)
 
         assert workflow.read_text(encoding="utf-8") == original
 
@@ -314,7 +325,7 @@ class TestApplyRecommendedUpdates:
         uniq.add(action)
 
         with caplog.at_level(logging.DEBUG):
-            result = apply_recommended_updates({workflow: [{1: original.rstrip("\n")}]}, uniq, dry_run=False)
+            result = apply_recommended_updates(_scan(workflow, original), uniq, dry_run=False)
 
         assert workflow.read_text(encoding="utf-8") == original
         assert result.files_changed == 0
@@ -336,7 +347,7 @@ class TestApplyRecommendedUpdates:
         uniq.add(action)
 
         with caplog.at_level(logging.DEBUG):
-            result = apply_recommended_updates({workflow: [{1: original.rstrip("\n")}]}, uniq, dry_run=True)
+            result = apply_recommended_updates(_scan(workflow, original), uniq, dry_run=True)
 
         assert result.files_changed == 1
         assert len(result.replacements) == 1
@@ -365,7 +376,7 @@ class TestApplyRecommendedUpdates:
         uniq.add(action)
 
         with console.capture() as capture:
-            apply_recommended_updates({workflow: [{1: original.rstrip("\n")}]}, uniq, dry_run=True)
+            apply_recommended_updates(_scan(workflow, original), uniq, dry_run=True)
 
         assert "ignore[max-days]" in capture.get()
 
@@ -403,7 +414,7 @@ class TestApplyRecommendedUpdates:
         uniq = UniqGithubActions()
         uniq.add(action)
 
-        apply_recommended_updates({workflow: [{1: original.rstrip("\n")}]}, uniq, dry_run=False)
+        apply_recommended_updates(_scan(workflow, original), uniq, dry_run=False)
 
         assert (
             workflow.read_text(encoding="utf-8")
@@ -444,8 +455,8 @@ class TestApplyRecommendedUpdates:
         apply_recommended_updates(
             {
                 workflow: [
-                    {1: original.splitlines()[0]},
-                    {2: original.splitlines()[1]},
+                    _occurrence(workflow, 1, original.splitlines()[0]),
+                    _occurrence(workflow, 2, original.splitlines()[1]),
                 ]
             },
             uniq,
@@ -456,16 +467,6 @@ class TestApplyRecommendedUpdates:
             "- uses: actions/checkout@def456 # v4.3.0 # gh-action-pulse: ignore[max-days]\n"
             "- uses: actions/checkout@def456 # v4.3.0 # keep me\n"
         )
-
-    def test_ignores_lines_that_do_not_match_uses_pattern(self, tmp_path: Path) -> None:
-        """Non-matching scanned lines are left untouched."""
-        workflow = tmp_path / "workflow.yml"
-        original = "name: Example\n"
-        workflow.write_text(original, encoding="utf-8")
-
-        apply_recommended_updates({workflow: [{1: "name: Example"}]}, UniqGithubActions(), dry_run=False)
-
-        assert workflow.read_text(encoding="utf-8") == original
 
     def test_format_uses_change_falls_back_when_line_has_no_uses(self) -> None:
         """Lines that do not contain `uses:` are shown stripped as old → new."""
