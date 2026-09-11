@@ -29,7 +29,7 @@ repos:
       # hooks to use on all my projects
       - id: editorconfig-checker # editorconfig-checker config
         name: editorconfig-checker
-        entry: ec
+        entry: editorconfig-checker
         language: system
       - id: rumdl # markdown linter
         name: rumdl
