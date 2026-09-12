@@ -19,9 +19,18 @@ on:
         required: false
         type: boolean
         default: false
+      mise_version:
+        description: Override mise-action version option.
+        required: false
+        type: string
+        default: ''
 
 permissions:
   contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   prek-checks:
@@ -53,8 +62,12 @@ jobs:
         env:
           MISE_INSTALL_FROM_GITHUB: 1
         with:
-          cache: false
-          version: ${{ vars.MISE_VERSION }}
+          # Disable cache on tag publishes so a poisoned mise cache cannot
+          # be restored into the wheel uploaded to PyPI (zizmor
+          # cache-poisoning). PRs and branch pushes may still cache.
+          cache: ${{ !startsWith(github.ref, 'refs/tags/') }}
+          cache_key_prefix: mise-v1-code-checks.yml
+          version: ${{ inputs.mise_version || vars.MISE_VERSION }}
 
       - name: Run prek checks
         env:
@@ -92,8 +105,12 @@ jobs:
         env:
           MISE_INSTALL_FROM_GITHUB: 1
         with:
-          cache: false
-          version: ${{ vars.MISE_VERSION }}
+          # Disable cache on tag publishes so a poisoned mise cache cannot
+          # be restored into the wheel uploaded to PyPI (zizmor
+          # cache-poisoning). PRs and branch pushes may still cache.
+          cache: ${{ !startsWith(github.ref, 'refs/tags/') }}
+          cache_key_prefix: mise-v1-code-checks.yml
+          version: ${{ inputs.mise_version || vars.MISE_VERSION }}
 
       - name: Build wheel distribution file
         run: |
@@ -124,7 +141,6 @@ jobs:
     steps:
 
       - name: Download all the dists
-        # editorconfig-checker-disable-next-line # this is a really long line
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1 # gh-action-pulse: ignore[max-age]
         with:
           name: python-package-distributions
@@ -149,7 +165,6 @@ jobs:
 
     steps:
       - name: Download all the dists
-        # editorconfig-checker-disable-next-line # this is a really long line
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1 # gh-action-pulse: ignore[max-age]
         with:
           name: python-package-distributions

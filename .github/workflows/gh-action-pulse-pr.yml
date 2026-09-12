@@ -6,6 +6,17 @@ on:
     # Wednesday 12:00 Europe/Paris. GitHub cron is UTC-only: 10:00 UTC during CEST, 11:00 UTC during CET.
     - cron: '0 10 * * 3'
   workflow_dispatch:
+    inputs:
+      mise_cache:
+        description: Override mise-action cache option.
+        required: false
+        type: boolean
+        default: true
+      mise_version:
+        description: Override mise-action version option.
+        required: false
+        type: string
+        default: ''
 
 concurrency:
   group: gh-action-pulse-pr
@@ -59,8 +70,9 @@ jobs:
         env:
           MISE_INSTALL_FROM_GITHUB: 1
         with:
-          cache: false
-          version: ${{ vars.MISE_VERSION }}
+          cache: ${{ github.event_name == 'workflow_dispatch' && toJSON(inputs.mise_cache) || vars.MISE_CACHE || 'true' }}
+          cache_key_prefix: mise-v1-gh-action-pulse-pr.yml
+          version: ${{ inputs.mise_version || vars.MISE_VERSION }}
 
       - name: Run gh-action-pulse
         id: pulse
