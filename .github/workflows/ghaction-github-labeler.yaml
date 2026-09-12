@@ -11,6 +11,10 @@ on:
     paths:
       - '.github/labels.yml'
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   labeler:
     runs-on: ubuntu-latest
@@ -25,7 +29,6 @@ jobs:
           persist-credentials: false
 
       - name: Run Labeler
-        # editorconfig-checker-disable-next-line # this is a really long line
         uses: crazy-max/ghaction-github-labeler@548a7c3603594ec17c819e1239f281a3b801ab4d # v6.0.0 # gh-action-pulse: override[max-age=200]
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}

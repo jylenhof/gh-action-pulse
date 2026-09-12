@@ -14,6 +14,16 @@ on:
         description: Comma separated tools to exclude from the upgrade.
         required: false
         default: ''
+      mise_cache:
+        description: Override mise-action cache option.
+        required: false
+        type: boolean
+        default: true
+      mise_version:
+        description: Override mise-action version option.
+        required: false
+        type: string
+        default: ''
 
 permissions:
   contents: read
@@ -23,6 +33,16 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
+      - name: "Cleaning up"
+        uses: gacts/run-and-post-run@fc6503862aba998e2f2123225ad63c09a92ed46e # v1.4.5
+        with:
+          run: |
+            echo "Pre-Check Cleanup"
+            echo "~/.local" | xargs rm -rf
+          post: |
+            echo "Post-Check Cleanup"
+            echo "~/.local" | xargs rm -rf
+
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -41,6 +61,10 @@ jobs:
 
       - name: Install mise
         uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
+        with:
+          cache: ${{ github.event_name == 'workflow_dispatch' && toJSON(inputs.mise_cache) || vars.MISE_CACHE || 'true' }}
+          cache_key_prefix: mise-v1-mise-update-tool.yml
+          version: ${{ inputs.mise_version || vars.MISE_VERSION }}
 
       - name: Upgrade local mise tools
         uses: jylenhof/mise-update-tool@2c847ded31353d8e4e70a1b334078d2aa2bc16b9 # v1.0.4
