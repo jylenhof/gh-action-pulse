@@ -23,7 +23,6 @@ from rich.progress import BarColumn, Progress, SpinnerColumn, TaskProgressColumn
 
 from gh_action_pulse.actions import GithubAction, GithubActionNotFoundError
 from gh_action_pulse.helpers.console import console, phase_status
-from gh_action_pulse.helpers.uses_line import USES_LINE_PATTERN, parse_trailing_comments
 
 logger = logging.getLogger(__name__)
 
@@ -33,6 +32,8 @@ if TYPE_CHECKING:
 
     from github import Github
 
+    from gh_action_pulse.helpers.uses_line import UsesOccurrence
+
 
 class UniqGithubActions:
     """A collection of unique GitHub Actions harvested from project files."""
@@ -41,32 +42,29 @@ class UniqGithubActions:
         """Initialize an empty set of GitHub Actions."""
         self._actions: set[GithubAction] = set()
 
-    def init_from_full_list(self, full_list: dict[Path, list[dict[int, str]]]) -> None:
-        """Parse action references from a scanned list of file matches."""
-        logger.debug("Parsing action references from scanned files with de-duplication...")
-        for matches in full_list.values():
-            for match_dict in matches:
-                for line in match_dict.values():
-                    if match := USES_LINE_PATTERN.search(line):
-                        name: str = match.group("name")
-                        reference: str = match.group("reference")
-                        actual_description, actual_comments = parse_trailing_comments(match.group("comments"))
-                        logger.debug(
-                            "Found action \n=>name: %s \n=>reference: %s \n=>actual description: %s"
-                            " \n=>actual_comments: %s",
-                            name,
-                            reference,
-                            actual_description,
-                            actual_comments,
-                        )
-                        action = GithubAction(
-                            name=name,
-                            reference=reference,
-                            actual_description=actual_description,
-                            comments=actual_comments,
-                        )
-                        self.add(action)
-        logger.debug("Finished parsing action references. Total unique actions found: %d\n", len(self._actions))
+    def init_from_full_list(self, full_list: dict[Path, list[UsesOccurrence]]) -> None:
+        """Collect unique actions from scanned uses-line occurrences."""
+        logger.debug("Collecting unique action references from scanned uses: lines...")
+        for occurrences in full_list.values():
+            for occurrence in occurrences:
+                logger.debug(
+                    "Found action \n=>name: %s \n=>reference: %s \n=>actual description: %s \n=>actual_comments: %s",
+                    occurrence.name,
+                    occurrence.reference,
+                    occurrence.description,
+                    occurrence.comments,
+                )
+                self.add(
+                    GithubAction(
+                        name=occurrence.name,
+                        reference=occurrence.reference,
+                        actual_description=occurrence.description,
+                        comments=occurrence.comments,
+                    )
+                )
+        logger.debug(
+            "Finished collecting unique action references. Total unique actions found: %d\n", len(self._actions)
+        )
 
     def add(self, action: GithubAction) -> None:
         """Add a unique GithubAction to the collection."""

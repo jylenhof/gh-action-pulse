@@ -17,11 +17,17 @@
 
 import re
 from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
 
 from gh_action_pulse.helpers.constants import ALLOWED_IGNORE_CHECKS, ALLOWED_OVERRIDE_KEYS, MAX_MIN_AGE
 
+if TYPE_CHECKING:
+    from pathlib import Path
+
+# Shared by parse and rewrite so indent / optional dash / ``uses:`` cannot drift.
+USES_LINE_PREFIX = r"(?P<prefix>\s*[-]?\s{0,1}uses:\s*)"
 USES_LINE_PATTERN = re.compile(
-    r"^\s*[-]?\s{0,1}uses:\s*"
+    rf"^{USES_LINE_PREFIX}"
     r"(?P<name>[^@\s]+)@"
     r"(?P<reference>[^\s#]+)"
     r"(?:\s+#\s+(?P<comments>.+))?"
@@ -30,6 +36,48 @@ USES_LINE_PATTERN = re.compile(
 IGNORE_HINT_PATTERN = re.compile(r"^gh-action-pulse:\s*ignore\[(?P<body>[^\]]*)\]$")
 OVERRIDE_HINT_PATTERN = re.compile(r"^gh-action-pulse:\s*override\[(?P<body>[^\]]*)\]$")
 OVERRIDE_ASSIGNMENT_PATTERN = re.compile(r"^['\"]?(?P<key>[A-Za-z0-9_-]+)['\"]?\s*=\s*['\"]?(?P<value>-?\d+)['\"]?$")
+
+
+@dataclass(frozen=True)
+class UsesOccurrence:
+    """A single ``owner/repo@ref`` uses-line found while scanning workflow files."""
+
+    file: Path
+    line_number: int
+    raw_line: str
+    name: str
+    reference: str
+    description: str | None
+    comments: list[str]
+
+
+def parse_uses_line(line: str, *, file: Path, line_number: int) -> UsesOccurrence | None:
+    """Parse a workflow line into a UsesOccurrence, or None when it is not ``name@ref``.
+
+    Docker, local ``./``, and other refs without ``@`` are rejected here so later
+    stages never re-parse or skip the same line.
+    """
+    if match := USES_LINE_PATTERN.search(line):
+        description, comments = parse_trailing_comments(match.group("comments"))
+        return UsesOccurrence(
+            file=file,
+            line_number=line_number,
+            raw_line=line.rstrip("\n"),
+            name=match.group("name"),
+            reference=match.group("reference"),
+            description=description,
+            comments=comments,
+        )
+    return None
+
+
+def rewrite_uses_line(line: str, replacement: str) -> str:
+    """Replace the action@ref (and comments) while keeping the captured ``uses:`` prefix."""
+
+    def _replace(match: re.Match[str]) -> str:
+        return f"{match.group('prefix')}{replacement}"
+
+    return USES_LINE_PATTERN.sub(_replace, line, count=1)
 
 
 @dataclass(frozen=True)
