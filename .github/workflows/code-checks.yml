@@ -62,7 +62,11 @@ jobs:
         env:
           MISE_INSTALL_FROM_GITHUB: 1
         with:
-          cache: false
+          # Disable cache on tag publishes so a poisoned mise cache cannot
+          # be restored into the wheel uploaded to PyPI (zizmor
+          # cache-poisoning). PRs and branch pushes may still cache.
+          cache: ${{ !startsWith(github.ref, 'refs/tags/') }}
+          cache_key_prefix: mise-v1-code-checks.yml
           version: ${{ inputs.mise_version || vars.MISE_VERSION }}
 
       - name: Run prek checks
@@ -101,7 +105,11 @@ jobs:
         env:
           MISE_INSTALL_FROM_GITHUB: 1
         with:
-          cache: false
+          # Disable cache on tag publishes so a poisoned mise cache cannot
+          # be restored into the wheel uploaded to PyPI (zizmor
+          # cache-poisoning). PRs and branch pushes may still cache.
+          cache: ${{ !startsWith(github.ref, 'refs/tags/') }}
+          cache_key_prefix: mise-v1-code-checks.yml
           version: ${{ inputs.mise_version || vars.MISE_VERSION }}
 
       - name: Build wheel distribution file
