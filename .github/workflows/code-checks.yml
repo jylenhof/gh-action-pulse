@@ -122,6 +122,7 @@ jobs:
         with:
           name: python-package-distributions
           path: dist/
+          retention-days: 7
 
   publish-to-pypi:
     name: Publish Python 🐍 distribution 📦 to PyPI
