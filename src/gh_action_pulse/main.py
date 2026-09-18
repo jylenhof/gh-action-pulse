@@ -49,7 +49,7 @@ from gh_action_pulse.helpers.constants import (
     STALE_TAG_ERROR_EXIT_CODE,
 )
 from gh_action_pulse.helpers.github import get_github_token
-from gh_action_pulse.helpers.uses_line import USES_LINE_PATTERN, parse_trailing_comments
+from gh_action_pulse.helpers.uses_line import UsesOccurrence, rewrite_uses_line
 from gh_action_pulse.nodejs_version import (
     NodeVersionChecker,
     NodeVersionViolation,
@@ -218,7 +218,7 @@ def _format_uses_change(old_line: str, new_line: str) -> str:
 
 
 def apply_recommended_updates(
-    results: dict[Path, list[dict[int, str]]],
+    results: dict[Path, list[UsesOccurrence]],
     uniq_github_actions: UniqGithubActions,
     *,
     dry_run: bool,
@@ -226,47 +226,39 @@ def apply_recommended_updates(
     """Rewrite scanned files with recommended action references (unless in dry-run mode)."""
     result = UpdateResult()
     started = time.perf_counter()
-    for file, actions_list in results.items():
+    for file, occurrences in results.items():
         logger.debug("Reading %s file to update github actions", file)
         with Path.open(file) as f:
             file_lines = f.readlines()  # start with index 0
         logger.debug("%s file read to update github actions\n", file)
         file_changed = False
-        for action_with_line in actions_list:
-            for line_number, full_line in action_with_line.items():
-                if match := USES_LINE_PATTERN.search(full_line):
-                    name: str = match.group("name")
-                    actual_reference: str = match.group("reference")
-                    actual_description, actual_comments = parse_trailing_comments(match.group("comments"))
-                    uniq_action = uniq_github_actions.get_item(
-                        name, actual_reference, actual_description, actual_comments
+        for occurrence in occurrences:
+            uniq_action = uniq_github_actions.get_item(
+                occurrence.name,
+                occurrence.reference,
+                occurrence.description,
+                occurrence.comments,
+            )
+            if replacement := uniq_action.get_updated_uses_replacement(
+                actual_reference=occurrence.reference,
+                actual_comments=occurrence.comments,
+            ):
+                line_number = occurrence.line_number
+                old_line = file_lines[line_number - 1]
+                logger.debug("Changing line number: %s", line_number)
+                logger.debug("from:\n%s", old_line)
+                file_lines[line_number - 1] = rewrite_uses_line(old_line, replacement)
+                new_line = file_lines[line_number - 1]
+                logger.debug("to:\n%s", new_line)
+                result.replacements.append(
+                    Replacement(
+                        file=file,
+                        line_number=line_number,
+                        old=old_line.rstrip("\n"),
+                        new=new_line.rstrip("\n"),
                     )
-                    if replacement := uniq_action.get_updated_uses_replacement(
-                        actual_reference=actual_reference,
-                        actual_comments=actual_comments,
-                    ):
-                        old_line = file_lines[line_number - 1]
-                        logger.debug("Changing line number: %s", line_number)
-                        logger.debug("from:\n%s", old_line)
-                        file_lines[line_number - 1] = re.sub(
-                            pattern=(
-                                r"^(?P<prefix>\s*[-]?\s{0,1}uses:\s*)"
-                                r"(?:[^@\s]+)@[^\s#]+(?:\s+#\s+.+)?"
-                            ),
-                            repl=r"\g<prefix>" + replacement,
-                            string=file_lines[line_number - 1],
-                        )
-                        new_line = file_lines[line_number - 1]
-                        logger.debug("to:\n%s", new_line)
-                        result.replacements.append(
-                            Replacement(
-                                file=file,
-                                line_number=line_number,
-                                old=old_line.rstrip("\n"),
-                                new=new_line.rstrip("\n"),
-                            )
-                        )
-                        file_changed = True
+                )
+                file_changed = True
         if file_changed:
             result.files_changed += 1
             if dry_run:
