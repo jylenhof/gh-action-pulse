@@ -569,7 +569,7 @@ def main(
         logger.exception("Failed to get GitHub token")
         raise typer.Exit(code=GITHUB_TOKEN_ERROR_EXIT_CODE) from e
 
-    g = Github(auth=Auth.Token(token))
+    g = Github(auth=Auth.Token(token), per_page=100)
 
     scan_started = time.perf_counter()
     full_list_of_existing_actions = FullListOfExistingActions(
