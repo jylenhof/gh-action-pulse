@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.4.1](https://github.com/jylenhof/gh-action-pulse/compare/v1.4.0...v1.4.1) (2026-09-19)
+
+
+### Performance Improvements
+
+* **github:** override from default 30 to 100 results request to boost ([#241](https://github.com/jylenhof/gh-action-pulse/issues/241)) ([0a4699a](https://github.com/jylenhof/gh-action-pulse/commit/0a4699ad0d67f3c10809d923cc5725c0ee11a9b2))
+
 ## [1.4.0](https://github.com/jylenhof/gh-action-pulse/compare/v1.3.0...v1.4.0) (2026-08-22)
 
 
