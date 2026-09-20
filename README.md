@@ -104,6 +104,136 @@ pipx install gh-action-pulse
 uv tool install . --force --reinstall
 ```
 
+## Using it in GitHub Actions
+
+`gh-action-pulse` is a CLI. Two complementary workflows cover the usual split:
+
+1. **Policy check** on pull requests and the default branch: `--dry-run` fails only when an action is too old, runs on Node.js below 24, or is archived. Proposed SHA pins and redirects do **not** fail the job.
+2. **Scheduled pull request**: apply rewrites and open a PR when files actually changed. Routine version bumps on already-pinned actions can stay with Dependabot.
+
+The YAML below is a simplified starting point (`pip` + `GITHUB_TOKEN`). This repository runs fuller versions (mise, GitHub App token, extra cleanup): [`.github/workflows/gh-action-pulse.yml`](.github/workflows/gh-action-pulse.yml) and [`.github/workflows/gh-action-pulse-pr.yml`](.github/workflows/gh-action-pulse-pr.yml).
+
+### Policy check (CI)
+
+Use a high `--max-age` so the job stays green while Dependabot or the scheduled workflow refresh pins. It should fail when an upstream tag is genuinely stale (`exit 5`) or the action (including composite dependencies) still runs on Node.js below 24 (`exit 3`). Archived upstream repositories also fail the run (`exit 4`).
+
+`--min-age 7` and `--minimum-nodejs-version 24` are already the CLI defaults; they are spelled out here so the policy is obvious in the workflow file. `--min-age 7` also matches the scheduled recipe and a typical Dependabot cooldown.
+
+```yaml
+name: Actions policy
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  gh-action-pulse:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.14"
+
+      - name: Install gh-action-pulse
+        run: pip install gh-action-pulse
+
+      - name: Check action freshness and Node.js runtime
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh-action-pulse --dry-run \
+            --min-age 7 \
+            --max-age 365 \
+            --minimum-nodejs-version 24
+```
+
+### Scheduled pull request
+
+Run without `--dry-run` on a weekly schedule (and on demand). `peter-evans/create-pull-request` opens a PR only when `gh-action-pulse` wrote changes; it no-ops on a clean tree.
+
+`--min-age 7` waits out brand-new tags. That pairs well with a Dependabot `cooldown` of about a week, so the two bots are not racing to adopt a tag that appeared yesterday.
+
+```yaml
+name: Update Actions pins
+
+on:
+  schedule:
+    - cron: "0 10 * * 3"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  gh-action-pulse-pr:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.14"
+
+      - name: Install gh-action-pulse
+        run: pip install gh-action-pulse
+
+      - name: Update action references
+        id: pulse
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set +e
+          gh-action-pulse \
+            --min-age 7 \
+            --max-age 365 \
+            --minimum-nodejs-version 24
+          status=$?
+          echo "exit-code=${status}" >> "$GITHUB_OUTPUT"
+          exit 0
+
+      - uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8.1.1
+        with:
+          commit-message: "chore: update GitHub Actions references"
+          branch: chore/gh-action-pulse
+          title: "chore: update GitHub Actions references"
+          body: |
+            Automated pin and redirect updates from `gh-action-pulse`.
+            Routine version bumps on already-pinned actions are still
+            expected from Dependabot.
+
+      - name: Fail on gh-action-pulse errors
+        if: steps.pulse.outputs.exit-code != '0'
+        env:
+          PULSE_EXIT_CODE: ${{ steps.pulse.outputs.exit-code }}
+        run: exit "$PULSE_EXIT_CODE"
+```
+
+Pulse writes rewrites first, then exits non-zero on Node.js or `--max-age` failures. The steps above still open the PR, then fail the job so a stale or too-old Node.js action stays visible.
+
+Pulse always rewrites files under `.github/workflows`. The default `GITHUB_TOKEN` cannot push workflow-file changes, and pull requests it opens do not start other workflows. For a production bot (including this repository), use a GitHub App token with `contents: write`, `pull-requests: write`, and `workflows: write`, or a fine-grained PAT with the equivalent permissions. See [`.github/workflows/gh-action-pulse-pr.yml`](.github/workflows/gh-action-pulse-pr.yml) for the App-token variant.
+
+### Dependabot
+
+Keep a `github-actions` Dependabot update (optionally grouped minor/patch with a cooldown). Dependabot bumps existing `owner/repo@sha` pins when a newer release exists. `gh-action-pulse` additionally:
+
+- converts `owner/repo@v2` / `@main` into a pinned SHA with a version comment;
+- rewrites redirected action repositories to their canonical name;
+- ignores tags younger than `--min-age` when choosing a recommendation;
+- fails the policy job on Node.js runtime, `--max-age`, or archived upstreams.
+
+The two overlap on “newer SHA for the same action”. That is expected. Pulse PRs should stay rare if Dependabot is healthy.
+
 ## CLI Usage
 
 Run against the current repository:
