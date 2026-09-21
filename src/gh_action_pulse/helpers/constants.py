@@ -26,7 +26,7 @@ SEARCH_CONFIGS: list[tuple[Path, str]] = [
 
 DEFAULT_MIN_AGE = 7
 MAX_MIN_AGE = 60
-DEFAULT_MAX_AGE = 150
+DEFAULT_MAX_AGE = 250
 
 # Minimum Node.js major version GitHub Actions (and their recursive dependencies)
 # are expected to run on. Set to 0 to disable the check.
