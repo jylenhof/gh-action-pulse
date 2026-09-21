@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.5.0](https://github.com/jylenhof/gh-action-pulse/compare/v1.4.1...v1.5.0) (2026-09-21)
+
+
+### Features
+
+* **constants:** bump default mage age ([#247](https://github.com/jylenhof/gh-action-pulse/issues/247)) ([3207f39](https://github.com/jylenhof/gh-action-pulse/commit/3207f39923aa03ebeb8ba1d51250d6ff174b999d))
+
+
+### Documentation
+
+* add GitHub Actions policy and scheduled PR recipes ([#243](https://github.com/jylenhof/gh-action-pulse/issues/243)) ([075e8e1](https://github.com/jylenhof/gh-action-pulse/commit/075e8e1c6323fd4fa87f090e8f8a939515fafb99))
+
 ## [1.4.1](https://github.com/jylenhof/gh-action-pulse/compare/v1.4.0...v1.4.1) (2026-09-19)
 
 
