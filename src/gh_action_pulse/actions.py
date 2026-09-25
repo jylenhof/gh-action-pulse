@@ -358,7 +358,7 @@ class GithubAction:
         except GithubException:
             return False
 
-        return any(tag.commit.commit.sha == resolved_sha for tag in self.repo.get_tags())
+        return any(tag.commit.sha == resolved_sha for tag in self.repo.get_tags())
 
     def _set_recommended_to_branch(self, branch_name: str) -> None:
         """Sets the recommendation to the latest commit of a specific branch."""
