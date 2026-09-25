@@ -37,7 +37,43 @@ action@sha # bullshit
 => if not, find latest sha in all branches related to this commit sha + comment # branch
 
 action@bullshit
-=> full exit error on this one !
+=> full exit error on this one (exit code 6): every invalid reference is reported with the
+  action name, the reference and the `file:line` where it is used
+
+## Version tags
+
+"semver tag" above means a tag whose name, without a leading `v`, is a valid SemVer version
+(`v1.2.3`, `1.2.3-rc.1`). This is the recommended way of tagging an action.
+
+When a repository has no SemVer tag at all, non-SemVer version tags are used instead with the
+same rules (`min_age`, no downgrade, ...), and a warning is emitted. Accepted names are an optional
+`v`/`V`, one to three numeric components and an optional `-prerelease` suffix
+(`v1`, `v0.6`, `1.2`, `v2-beta`); missing components count as `0`. SemVer tags always win: as
+soon as one SemVer tag exists, non-SemVer version tags are ignored.
+
+## Degraded mode (no usable semver tag)
+
+When the rules above cannot produce a recommendation (no version tag, no tag old enough for
+`min_age`, a tag or branch that no longer exists, ...), the run does not stop: a warning is
+emitted, the action is listed in the "Degraded recommendations" table, and the best fallback
+is used, always pinning a SHA when possible:
+
+1. a tag is currently pinned (`action@tag`, `action@sha # tag`, or `action@sha` pointing at a tag)
+=> sha of that tag + comment # tag
+  (for `action@sha`, the most precise version-like tag at that sha is chosen, e.g. `v1.2.0` over `v1`)
+2. otherwise, a branch is pinned (`action@branch`, `action@sha # branch`)
+=> sha of last commit of this branch + comment # branch
+3. otherwise, for `action@sha`
+=> find latest sha in all branches related to this commit sha + comment # branch
+4. otherwise
+=> keep the `uses:` line unchanged
+
+`action@bullshit` (a reference that exists neither as a branch, a tag nor a commit) still
+stops the run, as stated above.
+
+Freshness (`max-age`) is checked against the selected version tag, SemVer or not. When no version
+tag exists at all, freshness cannot be verified and the action is reported as stale
+(use `ignore[max-age]` on that line to accept it).
 
 Extra `#` comments after the first trailing comment (for example `gh-action-pulse: ignore[max-age]`)
 are preserved when rewriting a `uses:` line. If the first comment is a tag or branch, it is

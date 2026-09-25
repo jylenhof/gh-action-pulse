@@ -23,7 +23,7 @@ For each detected `uses:` line, `gh-action-pulse`:
 1. Finds GitHub Actions references in the configured workflow and action directories.
 2. Queries the GitHub API for the referenced repository.
 3. Detects whether the current reference is a tag, branch, or SHA.
-4. Selects the newest SemVer tag that is at least `--min-age` days old.
+4. Selects the newest SemVer tag that is at least `--min-age` days old (falling back to non-SemVer version tags such as `v1` or `v0.6` when the repository has no SemVer tag).
 5. Falls back to a branch recommendation when that is safer or newer than the eligible tag.
 6. Rewrites redirected repositories to their canonical upstream name.
 
@@ -311,13 +311,16 @@ CLI flags override the matching environment variables when both are set.
 - `3`: a Node.js runtime problem was detected in the repository. When an action, or any of its composite/local composite dependencies, runs on a Node.js major version below `--minimum-nodejs-version` (default `24`), the tool logs an error and exits with status `3`. Set `--minimum-nodejs-version 0` to disable this check.
 - `4`: a referenced upstream action repository is archived.
 - `5`: a `--max-age` staleness failure occurred.
+- `6`: a `uses:` reference does not exist upstream (neither a branch, a tag nor a commit SHA); every invalid reference is listed with its `file:line`.
 
-When multiple failing conditions are detected in the same run, the exit code with the lowest number is returned: authentication (`2`) and archived repositories (`4`) stop the run early, and among end-of-run checks the Node.js exit code (`3`) takes precedence over stale tags (`5`).
+When multiple failing conditions are detected in the same run, the exit code with the lowest number is returned: authentication (`2`), archived repositories (`4`) and invalid references (`6`) stop the run early, and among end-of-run checks the Node.js exit code (`3`) takes precedence over stale tags (`5`).
 
 ## Limitations
 
 - Local actions such as `./.github/actions/my-action` are not part of the GitHub API lookup flow.
-- Recommendations depend on repositories exposing usable SemVer tags.
+- Recommendations work best with repositories exposing SemVer tags. Without them, the tool uses a degraded mode
+  (non-SemVer version tags, then the pinned tag or branch pinned to its SHA) and lists those actions under
+  "Degraded recommendations" (see [rules.md](rules.md#degraded-mode-no-usable-semver-tag)).
 - The tool needs GitHub API access, so rate limits and authentication still apply.
 
 ### Node.js version check (`--minimum-nodejs-version`)

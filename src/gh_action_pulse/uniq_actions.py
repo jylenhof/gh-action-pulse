@@ -21,7 +21,7 @@ from typing import TYPE_CHECKING
 
 from rich.progress import BarColumn, Progress, SpinnerColumn, TaskProgressColumn, TimeElapsedColumn
 
-from gh_action_pulse.actions import GithubAction, GithubActionNotFoundError
+from gh_action_pulse.actions import GithubAction, GithubActionNotFoundError, GithubActionReferenceNotFoundError
 from gh_action_pulse.helpers.console import console, phase_status
 from gh_action_pulse.helpers.uses_line import USES_LINE_PATTERN, parse_trailing_comments
 
@@ -32,6 +32,15 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from github import Github
+
+
+class GithubActionReferencesNotFoundError(Exception):
+    """Exception raised after the lookup when one or more uses-line references do not exist upstream."""
+
+    def __init__(self, errors: list[GithubActionReferenceNotFoundError]) -> None:
+        """Initialize with every reference lookup failure found during the run."""
+        self.errors = sorted(errors, key=lambda item: (item.name, item.reference))
+        super().__init__("\n".join(str(error) for error in self.errors))
 
 
 class UniqGithubActions:
@@ -105,6 +114,7 @@ class UniqGithubActions:
             return set()
 
         qualified: set[GithubAction] = set()
+        not_found: list[GithubActionReferenceNotFoundError] = []
         started = time.perf_counter()
         with Progress(
             SpinnerColumn(),
@@ -118,8 +128,13 @@ class UniqGithubActions:
             task_id = progress.add_task("Looking up upstream action metadata", total=len(actions))
             for action in actions:
                 progress.update(task_id, description=f"Looking up upstream action metadata  {action.name}")
-                qualified.add(action.get_fully_qualified(g, min_age))
+                try:
+                    qualified.add(action.get_fully_qualified(g, min_age))
+                except GithubActionReferenceNotFoundError as exc:
+                    not_found.append(exc)
                 progress.advance(task_id)
+        if not_found:
+            raise GithubActionReferencesNotFoundError(not_found)
         phase_status(
             "Looking up upstream action metadata…",
             "OK",

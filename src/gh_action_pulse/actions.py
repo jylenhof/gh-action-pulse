@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import datetime
 import logging
+import re
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Literal
 
@@ -33,6 +34,30 @@ from gh_action_pulse.helpers.uses_line import (
 )
 
 logger = logging.getLogger(__name__)
+
+VersionScheme = Literal["semver", "loose"]
+
+# Non-SemVer version tags accepted as a fallback when a repository has no SemVer tag at all,
+# e.g. "v1", "v0.6", "1.2" or "v2-beta" (missing minor/patch components default to 0).
+_LOOSE_VERSION_PATTERN = re.compile(
+    r"^[vV]?(?P<major>\d+)(?:\.(?P<minor>\d+))?(?:\.(?P<patch>\d+))?"
+    r"(?:-(?P<prerelease>[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?$"
+)
+
+
+def parse_version_tag(name: str, scheme: VersionScheme) -> semver.Version | None:
+    """Parse a tag name with the given versioning scheme, or return None when it does not match."""
+    if scheme == "semver":
+        clean_name = name.lstrip("v")
+        return semver.Version.parse(clean_name) if semver.Version.is_valid(clean_name) else None
+    if (match := _LOOSE_VERSION_PATTERN.match(name)) is None:
+        return None
+    return semver.Version(
+        major=int(match.group("major")),
+        minor=int(match.group("minor") or 0),
+        patch=int(match.group("patch") or 0),
+        prerelease=match.group("prerelease"),
+    )
 
 
 if TYPE_CHECKING:
@@ -81,7 +106,20 @@ class GithubActionArchivedError(Exception):
         super().__init__(f"GitHub Action repository '{repo_name}' is archived.")
 
 
-class GithubAction:
+class GithubActionReferenceNotFoundError(Exception):
+    """Exception raised when a uses-line reference is neither a branch, a tag nor a commit upstream."""
+
+    def __init__(self, name: str, reference: str) -> None:
+        """Initialize with the action name and the reference that could not be found."""
+        self.name = name
+        self.reference = reference
+        super().__init__(
+            f"Reference '{reference}' of action '{name}' does not exist upstream"
+            " (it is neither a branch, a tag nor a commit SHA)."
+        )
+
+
+class GithubAction:  # pylint: disable=too-many-instance-attributes
     """Represents a GitHub Action reference found in workflow or action files."""
 
     # local action like ./github/actions/myaction/action.yml are not considered here
@@ -91,7 +129,8 @@ class GithubAction:
     repo: Repository
     min_age: int
     min_age_tag_date: datetime.datetime | None = None
-    has_semver_tags: bool = False
+    has_version_tags: bool = False
+    version_scheme: VersionScheme | None = None
 
     def __init__(
         self,
@@ -111,6 +150,9 @@ class GithubAction:
             override_hint=parse_override_hints(comment_list),
         )
         self.recommended = Recommendation()
+        self.warnings: list[str] = []
+        self._all_tags: list[Tag] | None = None
+        self._related_branch_searched = False
 
     def ignores(self, check: str) -> bool:
         """Return True when this uses-line asked to skip the named check."""
@@ -292,73 +334,177 @@ class GithubAction:
 
     def _set_recommended_reference_and_date(self) -> None:
         """Orchestrates the recommendation logic based on reference type and versioning."""
-        valid_semver_tags = self._get_valid_semver_tags()
+        version_tags = self._get_version_tags()
         self.recommended.comments = list(self.actual.comments)
         match self.actual.reference_type:
             case "tag":
-                self._set_recommended_reference_and_date_to_tag_if_exists(valid_semver_tags)
+                self._set_recommended_reference_and_date_to_tag_if_exists(version_tags)
             case "branch":
-                self._set_recommended_with_fallback(valid_semver_tags, self.actual.reference)
+                self._set_recommended_with_fallback(version_tags, self.actual.reference)
             case "sha":
-                self._set_recommended_for_sha(valid_semver_tags)
+                self._set_recommended_for_sha(version_tags)
             case "bullshit":
-                logger.error("Cannot recommend update for invalid reference type.")
-                raise SystemExit(1)
+                raise GithubActionReferenceNotFoundError(self.name, self.actual.reference)
             case _:
                 logger.error("Unknown reference type encountered, that should not happen.")
                 raise SystemExit(1)
-        if self.recommended.description is not None:  # Should always be the case, just make linter happy
-            if self.actual.description_type in ["tag", "branch"] and self.recommended.comments:
-                self.recommended.comments[0] = self.recommended.description
-            else:
-                self.recommended.comments.insert(0, self.recommended.description)
+        if self.recommended.reference is None or self.recommended.description is None:
+            self._set_recommended_degraded()
+        if self.recommended.description is None:
+            # Degraded mode could not find anything better: keep the uses-line unchanged.
+            self.recommended.reference = None
+            self.recommended.comments = list(self.actual.comments)
+            return
+        if self.actual.description_type in ["tag", "branch"] and self.recommended.comments:
+            self.recommended.comments[0] = self.recommended.description
         else:
-            msg = "Recommended description is None, that should not happen."
-            raise ValueError(msg)
+            self.recommended.comments.insert(0, self.recommended.description)
 
-    def _get_valid_semver_tags(self) -> list[Tag]:
-        valid_semver_tags = []
-        for tag in self.repo.get_tags():
-            clean_name = tag.name.lstrip("v")
-            if semver.Version.is_valid(clean_name):
-                valid_semver_tags.append(tag)
-        valid_semver_tags.sort(key=lambda tag: semver.Version.parse(tag.name.lstrip("v")), reverse=True)
-        self.has_semver_tags = len(valid_semver_tags) != 0
-        return valid_semver_tags
+    def _warn(self, message: str) -> None:
+        """Log a warning and keep it for the end-of-run degraded recommendations report."""
+        logger.warning("%s", message)
+        self.warnings.append(message)
+
+    def _get_all_tags(self) -> list[Tag]:
+        """Return every tag of the repository, fetched once per action."""
+        if self._all_tags is None:
+            self._all_tags = list(self.repo.get_tags())
+        return self._all_tags
+
+    def _get_version_tags(self) -> list[Tag]:
+        """Return version tags sorted newest first, preferring SemVer and falling back to loose versions."""
+        all_tags = self._get_all_tags()
+        scheme: VersionScheme
+        for scheme in ("semver", "loose"):
+            parsed = [
+                (version, tag) for tag in all_tags if (version := parse_version_tag(tag.name, scheme)) is not None
+            ]
+            if not parsed:
+                continue
+            parsed.sort(key=lambda item: item[0], reverse=True)
+            self.version_scheme = scheme
+            self.has_version_tags = True
+            if scheme == "loose":
+                self._warn(
+                    f"No SemVer tag found for action '{self.name}'; falling back to non-SemVer version tags"
+                    f" (newest: '{parsed[0][1].name}')."
+                )
+            return [tag for _, tag in parsed]
+        self.version_scheme = None
+        self.has_version_tags = False
+        return []
+
+    def _parse_version(self, name: str) -> semver.Version | None:
+        """Parse a tag name with the versioning scheme selected for this repository (SemVer by default)."""
+        return parse_version_tag(name, self.version_scheme or "semver")
 
     def is_tag_fresh(self, max_age: int) -> bool:
         """Return True when the min-age eligible tag is not older than max_age."""
         if self.min_age_tag_date is not None:
             age = datetime.datetime.now(datetime.UTC) - self.min_age_tag_date.astimezone(datetime.UTC)
             return age.days <= max_age
-        return bool(self.has_semver_tags)
+        return bool(self.has_version_tags)
 
-    def _set_recommended_for_sha(self, valid_semver_tags: Sequence[Tag]) -> None:
+    def _set_recommended_for_sha(self, version_tags: Sequence[Tag]) -> None:
         match self.actual.description_type:
             case "tag":
-                self._set_recommended_reference_and_date_to_tag_if_exists(valid_semver_tags)
+                self._set_recommended_reference_and_date_to_tag_if_exists(version_tags)
                 return
             case "branch":
                 if self.actual.description is not None:
-                    self._set_recommended_with_fallback(valid_semver_tags, self.actual.description)
+                    self._set_recommended_with_fallback(version_tags, self.actual.description)
                 return
             case _:
                 if self._actual_sha_matches_tag():
-                    self._set_recommended_reference_and_date_to_tag_if_exists(valid_semver_tags)
+                    self._set_recommended_reference_and_date_to_tag_if_exists(version_tags)
                     return
 
                 self._set_recommended_to_latest_related_branch()
 
-    def _actual_sha_matches_tag(self) -> bool:
+    def _tags_matching_actual_sha(self) -> list[Tag]:
+        """Return the tags pointing at the pinned SHA (short SHAs are resolved first)."""
         if self.actual.reference_type != "sha":
-            return False
+            return []
 
         try:
             resolved_sha = self.repo.get_commit(sha=self.actual.reference).commit.sha
         except GithubException:
-            return False
+            return []
 
-        return any(tag.commit.sha == resolved_sha for tag in self.repo.get_tags())
+        return [tag for tag in self._get_all_tags() if tag.commit.sha == resolved_sha]
+
+    def _actual_sha_matches_tag(self) -> bool:
+        return bool(self._tags_matching_actual_sha())
+
+    def _get_pinned_tag_name(self) -> str | None:
+        """Return the tag currently pinned by the uses-line (reference, comment, or tag at the pinned SHA)."""
+        if self.actual.reference_type == "tag":
+            return self.actual.reference
+        if self.actual.description_type == "tag" and self.actual.description:
+            return self.actual.description
+        matching_tags = self._tags_matching_actual_sha()
+        if not matching_tags:
+            return None
+        # Prefer the most precise version-like tag (e.g. v1.2.3 over a floating v1), then a stable name order.
+        versioned = [
+            (version, tag) for tag in matching_tags if (version := parse_version_tag(tag.name, "loose")) is not None
+        ]
+        if versioned:
+            return max(versioned, key=lambda item: (item[0], len(item[1].name)))[1].name
+        return min(tag.name for tag in matching_tags)
+
+    def _set_recommended_to_tag_name(self, tag_name: str) -> bool:
+        """Recommend the commit SHA a tag points to; return False when the tag cannot be resolved."""
+        try:
+            commit = self.repo.get_commit(sha=tag_name)
+        except GithubException:
+            logger.debug("Failed to resolve tag '%s' for action '%s'.", tag_name, self.name)
+            return False
+        self.recommended.reference = commit.sha
+        self.recommended.date = commit.commit.committer.date
+        self.recommended.description = tag_name
+        return True
+
+    def _degraded_reason(self) -> str:
+        if not self.has_version_tags:
+            return "no version tag found"
+        return "no eligible version tag (min-age not met or no newer tag than the pinned one)"
+
+    def _set_recommended_degraded(self) -> None:
+        """Best-effort recommendation when the rules cannot be applied, always preferring a SHA pin."""
+        reason = self._degraded_reason()
+        self.recommended.reference = None
+        self.recommended.date = None
+        self.recommended.description = None
+
+        if (pinned_tag := self._get_pinned_tag_name()) is not None and self._set_recommended_to_tag_name(pinned_tag):
+            self._warn(f"Action '{self.name}': {reason}; pinning current tag '{pinned_tag}' to its commit SHA.")
+            return
+
+        branch_name = None
+        if self.actual.reference_type == "branch":
+            branch_name = self.actual.reference
+        elif self.actual.description_type == "branch":
+            branch_name = self.actual.description
+        if branch_name is not None:
+            self._set_recommended_to_branch(branch_name)
+            if self.recommended.reference is not None:
+                self._warn(f"Action '{self.name}': {reason}; pinning branch '{branch_name}' tip to its commit SHA.")
+                return
+
+        if self.actual.reference_type == "sha" and not self._related_branch_searched:
+            self._set_recommended_to_latest_related_branch()
+            if self.recommended.reference is not None:
+                self._warn(
+                    f"Action '{self.name}': {reason}; pinning the newest branch containing"
+                    f" '{self.actual.reference}' ('{self.recommended.description}')."
+                )
+                return
+
+        self._warn(
+            f"Action '{self.name}@{self.actual.reference}': {reason} and no tag or branch to follow;"
+            " keeping the current reference unchanged."
+        )
 
     def _set_recommended_to_branch(self, branch_name: str) -> None:
         """Sets the recommendation to the latest commit of a specific branch."""
@@ -372,6 +518,7 @@ class GithubAction:
 
     def _set_recommended_to_latest_related_branch(self) -> None:
         """Recommend the newest branch tip among branches that contain the pinned SHA."""
+        self._related_branch_searched = True
         try:
             latest_branch = None
             latest_date = None
@@ -412,25 +559,23 @@ class GithubAction:
         if should_use_branch:
             self._set_recommended_to_branch(branch_name)
 
-    def _get_actual_semver_version(self) -> semver.Version | None:
-        """Return the highest semver version from the pinned tag reference or comment."""
+    def _get_actual_version(self) -> semver.Version | None:
+        """Return the highest version from the pinned tag reference or comment."""
         version_strings: list[str] = []
         if self.actual.reference_type == "tag":
             version_strings.append(self.actual.reference)
         if self.actual.description_type == "tag" and self.actual.description:
             version_strings.append(self.actual.description)
 
-        versions = [
-            semver.Version.parse(clean)
-            for value in version_strings
-            for clean in [value.lstrip("v")]
-            if semver.Version.is_valid(clean)
-        ]
+        versions = [version for value in version_strings if (version := self._parse_version(value)) is not None]
         return max(versions) if versions else None
 
-    @staticmethod
-    def _parse_tag_version(tag: Tag) -> semver.Version:
-        return semver.Version.parse(tag.name.lstrip("v"))
+    def _parse_tag_version(self, tag: Tag) -> semver.Version:
+        version = self._parse_version(tag.name)
+        if version is None:  # Only called on tags returned by _get_version_tags
+            msg = f"Tag '{tag.name}' is not a version tag."
+            raise ValueError(msg)
+        return version
 
     @staticmethod
     def _tag_meets_min_age(tag: Tag, cutoff: datetime.datetime) -> bool:
@@ -462,7 +607,7 @@ class GithubAction:
         now = datetime.datetime.now(datetime.UTC)
         cutoff = now - datetime.timedelta(days=self._effective_min_age())
         self.min_age_tag_date = None
-        current_version = self._get_actual_semver_version()
+        current_version = self._get_actual_version()
 
         min_age_eligible_tag = None
         for tag in valid_semver_tags:

@@ -26,11 +26,12 @@ import pytest
 import typer
 from typer.testing import CliRunner
 
-from gh_action_pulse.actions import GithubAction, GithubActionArchivedError
+from gh_action_pulse.actions import GithubAction, GithubActionArchivedError, GithubActionReferenceNotFoundError
 from gh_action_pulse.helpers.console import console
 from gh_action_pulse.helpers.constants import (
     ARCHIVED_ACTION_ERROR_EXIT_CODE,
     GITHUB_TOKEN_ERROR_EXIT_CODE,
+    INVALID_REFERENCE_ERROR_EXIT_CODE,
     MAX_MIN_AGE,
     NODEJS_VERSION_ERROR_EXIT_CODE,
     STALE_TAG_ERROR_EXIT_CODE,
@@ -47,6 +48,8 @@ from gh_action_pulse.main import (
     check_node_versions,
     collect_ignored_checks,
     collect_overridden_settings,
+    find_uses_locations,
+    report_degraded_recommendations,
     report_ignored_checks,
     report_overridden_settings,
     validate_max_age,
@@ -58,7 +61,7 @@ from gh_action_pulse.main import (
     warn_about_stale_actions,
 )
 from gh_action_pulse.nodejs_version import NodeVersionViolation
-from gh_action_pulse.uniq_actions import UniqGithubActions
+from gh_action_pulse.uniq_actions import GithubActionReferencesNotFoundError, UniqGithubActions
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -389,7 +392,7 @@ class TestApplyRecommendedUpdates:
         action.recommended.reference = sha
         action.recommended.description = "v6.0.0"
         with (
-            patch("gh_action_pulse.actions.GithubAction._get_valid_semver_tags", return_value=[]),
+            patch("gh_action_pulse.actions.GithubAction._get_version_tags", return_value=[]),
             patch("gh_action_pulse.actions.GithubAction._set_recommended_for_sha") as mock_set_sha,
         ):
 
@@ -478,17 +481,17 @@ class TestWarnAboutStaleActions:
     def test_warns_when_no_semver_tags_exist(self, caplog: pytest.LogCaptureFixture) -> None:
         """Actions without semver tags emit a warning instead of a freshness error."""
         action = GithubAction("actions/example", "v1")
-        action.has_semver_tags = False
+        action.has_version_tags = False
 
         with caplog.at_level(logging.WARNING):
             warn_about_stale_actions([action], 150)
 
-        assert "No semver tag found for action 'actions/example'" in caplog.text
+        assert "No version tag found for action 'actions/example'" in caplog.text
 
     def test_logs_error_when_tag_is_stale(self, caplog: pytest.LogCaptureFixture) -> None:
         """Actions with an eligible tag older than max_age emit an error."""
         action = GithubAction("actions/example", "v1")
-        action.has_semver_tags = True
+        action.has_version_tags = True
         action.min_age_tag_date = datetime.datetime.now(datetime.UTC) - datetime.timedelta(days=200)
 
         with caplog.at_level(logging.ERROR):
@@ -499,7 +502,7 @@ class TestWarnAboutStaleActions:
     def test_skips_actions_with_semver_tags_but_no_eligible_date(self, caplog: pytest.LogCaptureFixture) -> None:
         """Actions with semver tags but no min-age eligible date do not emit freshness errors."""
         action = GithubAction("actions/example", "v1")
-        action.has_semver_tags = True
+        action.has_version_tags = True
         action.min_age_tag_date = None
 
         with caplog.at_level(logging.WARNING):
@@ -517,7 +520,7 @@ class TestWarnAboutStaleActions:
     def test_mentions_ignored_count_when_stale(self) -> None:
         """Stale results still mention how many max-age checks were skipped."""
         action = GithubAction("actions/example", "v1")
-        action.has_semver_tags = True
+        action.has_version_tags = True
         action.min_age_tag_date = datetime.datetime.now(datetime.UTC) - datetime.timedelta(days=200)
 
         with console.capture() as capture:
@@ -528,7 +531,7 @@ class TestWarnAboutStaleActions:
     def test_omits_limit_in_title_when_max_age_is_disabled(self) -> None:
         """Override-driven stale results still render when the CLI max-age is 0."""
         action = GithubAction("actions/example", "v1")
-        action.has_semver_tags = False
+        action.has_version_tags = False
 
         with console.capture() as capture:
             warn_about_stale_actions([action], 0)
@@ -641,6 +644,45 @@ class TestIgnoredChecks:
             )
 
         assert "1 ignored check" in capture.get()
+
+    def test_report_prints_degraded_recommendations_table(self) -> None:
+        """Actions with degraded-mode warnings are listed and returned."""
+        degraded = GithubAction("org/pkg", "sha-06", "v0.6")
+        degraded.warnings = ["No SemVer tag found; falling back to non-SemVer version tags."]
+        clean = GithubAction("actions/checkout", "v4")
+
+        with console.capture() as capture:
+            result = report_degraded_recommendations([clean, degraded])
+
+        output = capture.get()
+        assert result == [degraded]
+        assert "Degraded recommendations" in output
+        assert "org/pkg@sha-06" in output
+        assert "actions/checkout" not in output
+
+    def test_report_degraded_is_silent_when_empty(self) -> None:
+        """No degraded table is printed when every recommendation followed the rules."""
+        with console.capture() as capture:
+            result = report_degraded_recommendations([GithubAction("actions/checkout", "v4")])
+
+        assert result == []
+        assert capture.get() == ""
+
+    def test_summary_includes_degraded_recommendations(self) -> None:
+        """The closing summary counts degraded recommendations."""
+        with console.capture() as capture:
+            _print_summary(
+                update_result=UpdateResult(),
+                stale_actions=[],
+                node_version_violations=[],
+                ignored_checks=[],
+                overridden_settings=[],
+                dry_run=True,
+                exit_code=0,
+                degraded_actions=[GithubAction("actions/a", "v1"), GithubAction("actions/b", "v1")],
+            )
+
+        assert "2 degraded recommendations" in capture.get()
 
     def test_summary_includes_overrides(self) -> None:
         """The closing summary mentions override hints when they were used."""
@@ -818,6 +860,8 @@ class TestMainCommand:
         stale_actions: list[GithubAction] | None = None,
         node_version_violations: list[NodeVersionViolation] | None = None,
         archived_repo: str | None = None,
+        invalid_references: list[GithubActionReferenceNotFoundError] | None = None,
+        results: dict[Path, list[dict[int, str]]] | None = None,
     ) -> Iterator[tuple[MagicMock, MagicMock]]:
         with (
             patch("gh_action_pulse.main.get_github_token", return_value="token"),
@@ -830,11 +874,13 @@ class TestMainCommand:
             ),
             patch("gh_action_pulse.main.apply_recommended_updates", return_value=UpdateResult()) as mock_apply,
         ):
-            mock_scan_cls.return_value.get_results.return_value = {}
+            mock_scan_cls.return_value.get_results.return_value = results or {}
             mock_uniq = MagicMock()
             mock_uniq.get_stale_actions.return_value = stale_actions or []
             if archived_repo is not None:
                 mock_uniq.get_fully_qualified.side_effect = GithubActionArchivedError(archived_repo)
+            if invalid_references is not None:
+                mock_uniq.get_fully_qualified.side_effect = GithubActionReferencesNotFoundError(invalid_references)
             mock_uniq_cls.return_value = mock_uniq
             yield mock_uniq, mock_apply
 
@@ -891,6 +937,46 @@ class TestMainCommand:
             result = runner.invoke(app, ["--minimum-nodejs-version", "0", "--max-age", "0"])
 
         assert result.exit_code == ARCHIVED_ACTION_ERROR_EXIT_CODE
+
+    def test_invalid_references_exit_with_dedicated_code_and_locations(self) -> None:
+        """Every invalid reference is reported with its file:line before exiting with the dedicated code."""
+        results = {
+            Path("wf.yml"): [
+                {3: "      - uses: org/a@typo # note"},
+                {7: "      - uses: org/a@v1"},
+                {9: "      - uses: org/a@typo"},
+            ],
+        }
+        with (
+            self._patched_main(
+                invalid_references=[
+                    GithubActionReferenceNotFoundError("org/a", "typo"),
+                    GithubActionReferenceNotFoundError("org/b", "gone"),
+                ],
+                results=results,
+            ),
+            console.capture() as capture,
+        ):
+            result = runner.invoke(app, ["--minimum-nodejs-version", "0", "--max-age", "0"])
+
+        output = capture.get()
+        assert result.exit_code == INVALID_REFERENCE_ERROR_EXIT_CODE
+        assert "2 action reference(s) do not exist upstream." in output
+        assert "Invalid references" in output
+        assert "wf.yml:3" in output
+        assert "wf.yml:9" in output
+        assert "wf.yml:7" not in output
+        assert "exit 6" in output
+
+    def test_find_uses_locations_matches_name_and_reference(self) -> None:
+        """Only uses-lines with the exact action name and reference are located."""
+        results = {
+            Path("a.yml"): [{1: "  - uses: org/a@typo"}, {2: "  - uses: org/ab@typo"}, {3: "  run: echo"}],
+            Path("b.yml"): [{4: "    uses: org/a@typo # comment"}],
+        }
+
+        assert find_uses_locations(results, "org/a", "typo") == ["a.yml:1", "b.yml:4"]
+        assert not find_uses_locations(results, "org/c", "typo")
 
     def test_stale_actions_exit_with_dedicated_code(self) -> None:
         """Stale upstream tags cause the CLI to exit with the dedicated status code."""
