@@ -21,8 +21,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from gh_action_pulse.actions import GithubAction, GithubActionNotFoundError
-from gh_action_pulse.uniq_actions import UniqGithubActions
+from gh_action_pulse.actions import GithubAction, GithubActionNotFoundError, GithubActionReferenceNotFoundError
+from gh_action_pulse.uniq_actions import GithubActionReferencesNotFoundError, UniqGithubActions
 
 
 class TestUniqGithubActions:
@@ -292,6 +292,31 @@ class TestUniqGithubActions:
         uniq.add(stale)
 
         assert not uniq.get_stale_actions(0)
+
+    def test_get_fully_qualified_collects_every_invalid_reference(self) -> None:
+        """All invalid references are looked up and reported together, sorted by action."""
+        uniq = UniqGithubActions()
+        valid = GithubAction("actions/checkout", "v4")
+        uniq.add(valid)
+        uniq.add(GithubAction("org/b", "typo-b"))
+        uniq.add(GithubAction("org/a", "typo-a"))
+
+        def fake_get_fully_qualified(self: GithubAction, _g: MagicMock, _min_age: int) -> GithubAction:
+            if self.actual.reference.startswith("typo"):
+                raise GithubActionReferenceNotFoundError(self.name, self.actual.reference)
+            return self
+
+        with (
+            patch.object(GithubAction, "get_fully_qualified", autospec=True, side_effect=fake_get_fully_qualified),
+            pytest.raises(GithubActionReferencesNotFoundError) as exc_info,
+        ):
+            uniq.get_fully_qualified(MagicMock(), 0)
+
+        assert [(err.name, err.reference) for err in exc_info.value.errors] == [
+            ("org/a", "typo-a"),
+            ("org/b", "typo-b"),
+        ]
+        assert "Reference 'typo-a' of action 'org/a' does not exist upstream" in str(exc_info.value)
 
     @patch("gh_action_pulse.uniq_actions.GithubAction.get_fully_qualified")
     def test_get_fully_qualified_contents(self, mock_get_fq: MagicMock) -> None:

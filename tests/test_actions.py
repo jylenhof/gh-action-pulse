@@ -18,7 +18,7 @@
 # pylint: disable=too-many-lines
 
 import datetime
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING, ClassVar, Literal
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -28,10 +28,12 @@ from testfixtures import LogCapture, log_capture
 from gh_action_pulse.actions import (
     GithubAction,
     GithubActionArchivedError,
+    GithubActionReferenceNotFoundError,
+    parse_version_tag,
 )
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
+    from collections.abc import Callable, Iterator
 
 
 @pytest.fixture
@@ -48,6 +50,11 @@ def create_mock_tag() -> Callable[..., MagicMock]:
 
 class TestGithubAction:
     """Unit tests for GithubAction model and behavior."""
+
+    @pytest.fixture
+    def _no_version_tags(self) -> Iterator[None]:
+        with patch("gh_action_pulse.actions.GithubAction._get_version_tags", return_value=[]):
+            yield
 
     def test_equality(self) -> None:
         """Verify equality and hash semantics for GithubAction instances."""
@@ -486,12 +493,12 @@ class TestGithubAction:
         mock_repo.get_git_ref.assert_any_call("tags/invalid-desc")
         mock_repo.get_git_ref.assert_any_call("heads/invalid-desc")
 
-    @patch("gh_action_pulse.actions.GithubAction._get_valid_semver_tags")
+    @patch("gh_action_pulse.actions.GithubAction._get_version_tags")
     @patch("gh_action_pulse.actions.GithubAction._set_recommended_reference_and_date_to_tag_if_exists")
     def test__set_recommended_reference_and_date_tag(
         self,
         mock__set_recommended_reference_and_date_to_tag_if_exists: MagicMock,
-        mock__get_valid_semver_tags: MagicMock,
+        mock__get_version_tags: MagicMock,
     ) -> None:
         """Verify that _set_recommended_reference_and_date calls the correct method when reference is a tag."""
         action = GithubAction("actions/checkout", "v4")
@@ -500,8 +507,8 @@ class TestGithubAction:
         action.repo = mock_repo
         mock_tag_v4 = MagicMock()
         mock_tag_v6 = MagicMock()
-        mock__get_valid_semver_tags.return_value = [mock_tag_v6, mock_tag_v4]
-        mock_valid_semver_tags = mock__get_valid_semver_tags.return_value
+        mock__get_version_tags.return_value = [mock_tag_v6, mock_tag_v4]
+        mock_valid_semver_tags = mock__get_version_tags.return_value
 
         def set_recommendation(_tags: list) -> None:
             action.recommended.description = "v6.0.0"
@@ -510,15 +517,15 @@ class TestGithubAction:
 
         action._set_recommended_reference_and_date()
 
-        mock__get_valid_semver_tags.assert_called_once_with()
+        mock__get_version_tags.assert_called_once_with()
         mock__set_recommended_reference_and_date_to_tag_if_exists.assert_called_once_with(mock_valid_semver_tags)
 
-    @patch("gh_action_pulse.actions.GithubAction._get_valid_semver_tags")
+    @patch("gh_action_pulse.actions.GithubAction._get_version_tags")
     @patch("gh_action_pulse.actions.GithubAction._set_recommended_with_fallback")
     def test__set_recommended_reference_and_date_branch(
         self,
         mock__set_recommended_with_fallback: MagicMock,
-        mock__get_valid_semver_tags: MagicMock,
+        mock__get_version_tags: MagicMock,
     ) -> None:
         """Verify that _set_recommended_reference_and_date calls the correct method when reference is a branch."""
         action = GithubAction("actions/checkout", "main")
@@ -527,8 +534,8 @@ class TestGithubAction:
         action.repo = mock_repo
         mock_tag_v4 = MagicMock()
         mock_tag_v6 = MagicMock()
-        mock__get_valid_semver_tags.return_value = [mock_tag_v6, mock_tag_v4]
-        mock_valid_semver_tags = mock__get_valid_semver_tags.return_value
+        mock__get_version_tags.return_value = [mock_tag_v6, mock_tag_v4]
+        mock_valid_semver_tags = mock__get_version_tags.return_value
 
         def set_recommendation(_tags: list, _branch_name: str) -> None:
             action.recommended.description = "main"
@@ -537,15 +544,15 @@ class TestGithubAction:
 
         action._set_recommended_reference_and_date()
 
-        mock__get_valid_semver_tags.assert_called_once_with()
+        mock__get_version_tags.assert_called_once_with()
         mock__set_recommended_with_fallback.assert_called_once_with(mock_valid_semver_tags, "main")
 
-    @patch("gh_action_pulse.actions.GithubAction._get_valid_semver_tags")
+    @patch("gh_action_pulse.actions.GithubAction._get_version_tags")
     @patch("gh_action_pulse.actions.GithubAction._set_recommended_for_sha")
     def test__set_recommended_reference_and_date_sha(
         self,
         mock__set_recommended_for_sha: MagicMock,
-        mock__get_valid_semver_tags: MagicMock,
+        mock__get_version_tags: MagicMock,
     ) -> None:
         """Check that _set_recommended_reference_and_date calls the correct method when reference is a sha."""
         action = GithubAction("actions/checkout", "sha-for-v4", "v4.0.0")
@@ -554,8 +561,8 @@ class TestGithubAction:
         action.repo = mock_repo
         mock_tag_v4 = MagicMock()
         mock_tag_v6 = MagicMock()
-        mock__get_valid_semver_tags.return_value = [mock_tag_v6, mock_tag_v4]
-        mock_valid_semver_tags = mock__get_valid_semver_tags.return_value
+        mock__get_version_tags.return_value = [mock_tag_v6, mock_tag_v4]
+        mock_valid_semver_tags = mock__get_version_tags.return_value
 
         def set_recommendation(_tags: list) -> None:
             action.recommended.description = "v4.0.0"
@@ -564,15 +571,15 @@ class TestGithubAction:
 
         action._set_recommended_reference_and_date()
 
-        mock__get_valid_semver_tags.assert_called_once_with()
+        mock__get_version_tags.assert_called_once_with()
         mock__set_recommended_for_sha.assert_called_once_with(mock_valid_semver_tags)
 
-    @patch("gh_action_pulse.actions.GithubAction._get_valid_semver_tags")
+    @patch("gh_action_pulse.actions.GithubAction._get_version_tags")
     @patch("gh_action_pulse.actions.GithubAction._set_recommended_for_sha")
     def test__set_recommended_reference_and_date_does_not_mutate_actual_comments(
         self,
         mock__set_recommended_for_sha: MagicMock,
-        mock__get_valid_semver_tags: MagicMock,
+        mock__get_version_tags: MagicMock,
     ) -> None:
         """Updating the version comment must not rewrite the original comments used for lookup."""
         original_comments = ["v5.0.0", "gh-action-pulse: ignore[max-days]"]
@@ -584,7 +591,7 @@ class TestGithubAction:
         )
         action.actual.reference_type = "sha"
         action.actual.description_type = "tag"
-        mock__get_valid_semver_tags.return_value = []
+        mock__get_version_tags.return_value = []
 
         def set_recommendation(_tags: list) -> None:
             action.recommended.reference = "548a7c3603594ec17c819e1239f281a3b801ab4d"
@@ -598,12 +605,12 @@ class TestGithubAction:
         assert original_comments == ["v5.0.0", "gh-action-pulse: ignore[max-days]"]
         assert action.recommended.comments == ["v6.0.0", "gh-action-pulse: ignore[max-days]"]
 
-    @patch("gh_action_pulse.actions.GithubAction._get_valid_semver_tags")
+    @patch("gh_action_pulse.actions.GithubAction._get_version_tags")
     @patch("gh_action_pulse.actions.GithubAction._set_recommended_for_sha")
     def test__set_recommended_reference_and_date_inserts_description_before_annotation(
         self,
         mock__set_recommended_for_sha: MagicMock,
-        mock__get_valid_semver_tags: MagicMock,
+        mock__get_version_tags: MagicMock,
     ) -> None:
         """A non-tag first comment is kept and the recommended description is inserted in front."""
         action = GithubAction(
@@ -614,7 +621,7 @@ class TestGithubAction:
         )
         action.actual.reference_type = "sha"
         action.actual.description_type = "bullshit"
-        mock__get_valid_semver_tags.return_value = []
+        mock__get_version_tags.return_value = []
 
         def set_recommendation(_tags: list) -> None:
             action.recommended.reference = "def456"
@@ -627,18 +634,30 @@ class TestGithubAction:
         assert action.actual.comments == ["gh-action-pulse: ignore[max-days]"]
         assert action.recommended.comments == ["v4.2.0", "gh-action-pulse: ignore[max-days]"]
 
+    @pytest.mark.usefixtures("_no_version_tags")
+    def test__set_recommended_reference_and_date_bullshit_raises_reference_not_found(self) -> None:
+        """A reference that exists neither as branch, tag nor commit raises a descriptive error."""
+        action = GithubAction("actions/checkout", "v4-typo")
+        action.actual.reference_type = "bullshit"
+
+        with pytest.raises(GithubActionReferenceNotFoundError) as exc_info:
+            action._set_recommended_reference_and_date()
+
+        assert exc_info.value.name == "actions/checkout"
+        assert exc_info.value.reference == "v4-typo"
+        assert "Reference 'v4-typo' of action 'actions/checkout' does not exist upstream" in str(exc_info.value)
+
     @pytest.mark.parametrize(
         ("reference_type", "error_message"),
         [
-            ("bullshit", "Cannot recommend update for invalid reference type."),
             (None, "Unknown reference type encountered, that should not happen."),
         ],
     )
     @log_capture()
-    @patch("gh_action_pulse.actions.GithubAction._get_valid_semver_tags")
+    @patch("gh_action_pulse.actions.GithubAction._get_version_tags")
     def test__set_recommended_reference_and_date_bullshit(
         self,
-        mock__get_valid_semver_tags: MagicMock,
+        mock__get_version_tags: MagicMock,
         capture: LogCapture,
         reference_type: Literal["bullshit", "sha", "tag", "branch"] | None,
         error_message: str,
@@ -650,16 +669,16 @@ class TestGithubAction:
         action.repo = mock_repo
         mock_tag_v4 = MagicMock()
         mock_tag_v6 = MagicMock()
-        mock__get_valid_semver_tags.return_value = [mock_tag_v6, mock_tag_v4]
+        mock__get_version_tags.return_value = [mock_tag_v6, mock_tag_v4]
 
         with pytest.raises(SystemExit):
             action._set_recommended_reference_and_date()
 
-        mock__get_valid_semver_tags.assert_called_once_with()
+        mock__get_version_tags.assert_called_once_with()
         capture.check(("gh_action_pulse.actions", "ERROR", error_message))
 
-    def test__get_valid_semver_tags(self, create_mock_tag: Callable[..., MagicMock]) -> None:  # pylint: disable=redefined-outer-name
-        """Verify that _get_valid_semver_tags correctly filters and sorts tags based on semantic versioning."""
+    def test__get_version_tags(self, create_mock_tag: Callable[..., MagicMock]) -> None:  # pylint: disable=redefined-outer-name
+        """Verify that _get_version_tags correctly filters and sorts tags based on semantic versioning."""
         action = GithubAction("actions/checkout", "sha-for-main", "main")
         mock_repo = MagicMock()
 
@@ -676,7 +695,7 @@ class TestGithubAction:
         action.repo = mock_repo
         expected_names = ["v6.0.0", "v6.0.0-alpha1", "v5.0.0", "v4.0.2", "v4.0.1", "v4.0.0"]
 
-        results = action._get_valid_semver_tags()
+        results = action._get_version_tags()
 
         assert [tag.name for tag in results] == expected_names
 
@@ -1191,8 +1210,8 @@ class TestGithubAction:
         assert action.recommended.description == "v6.0.0"
         assert action.min_age_tag_date == mock_tag_v6.commit.commit.committer.date
 
-    def test__get_valid_semver_tags_sets_has_semver_tags(self) -> None:
-        """Verify that _get_valid_semver_tags records whether semver tags exist."""
+    def test__get_version_tags_sets_has_version_tags(self) -> None:
+        """Verify that _get_version_tags records whether semver tags exist."""
         action = GithubAction("actions/checkout", "v4")
         mock_repo = MagicMock()
         mock_tag_v4 = MagicMock()
@@ -1202,20 +1221,20 @@ class TestGithubAction:
         mock_repo.get_tags.return_value = [mock_tag_v4, mock_tag_v6]
         action.repo = mock_repo
 
-        action._get_valid_semver_tags()
+        action._get_version_tags()
 
-        assert action.has_semver_tags is True
+        assert action.has_version_tags is True
 
-    def test__get_valid_semver_tags_clears_has_semver_tags_when_empty(self) -> None:
-        """Verify that _get_valid_semver_tags clears has_semver_tags when no semver tags exist."""
+    def test__get_version_tags_clears_has_version_tags_when_empty(self) -> None:
+        """Verify that _get_version_tags clears has_version_tags when no semver tags exist."""
         action = GithubAction("actions/checkout", "v4")
         mock_repo = MagicMock()
         mock_repo.get_tags.return_value = []
         action.repo = mock_repo
 
-        action._get_valid_semver_tags()
+        action._get_version_tags()
 
-        assert action.has_semver_tags is False
+        assert action.has_version_tags is False
 
     def test__set_recommended_reference_and_date_to_tag_if_exists_sets_min_age_tag_date(self) -> None:
         """Verify that the min-age eligible tag date is stored for freshness checks."""
@@ -1247,7 +1266,7 @@ class TestGithubAction:
     def test_is_tag_fresh_when_all_tags_are_too_new_for_min_age(self) -> None:
         """Verify is_tag_fresh returns True when semver tags exist but none meet min-age yet."""
         action = GithubAction("actions/checkout", "v4")
-        action.has_semver_tags = True
+        action.has_version_tags = True
         action.min_age_tag_date = None
 
         assert action.is_tag_fresh(150) is True
@@ -1255,31 +1274,10 @@ class TestGithubAction:
     def test_is_tag_fresh_when_no_semver_tags(self) -> None:
         """Verify is_tag_fresh returns False when no semver tags exist."""
         action = GithubAction("actions/checkout", "v4")
-        action.has_semver_tags = False
+        action.has_version_tags = False
         action.min_age_tag_date = None
 
         assert action.is_tag_fresh(150) is False
-
-    @patch("gh_action_pulse.actions.GithubAction._get_valid_semver_tags")
-    @patch("gh_action_pulse.actions.GithubAction._set_recommended_for_sha")
-    def test__set_recommended_reference_and_date_raises_when_description_missing(
-        self,
-        mock__set_recommended_for_sha: MagicMock,
-        mock__get_valid_semver_tags: MagicMock,
-    ) -> None:
-        """A missing recommended description is treated as an internal error."""
-        action = GithubAction("actions/checkout", "abc123")
-        action.actual.reference_type = "sha"
-        mock__get_valid_semver_tags.return_value = []
-
-        def set_recommendation(_tags: list) -> None:
-            action.recommended.reference = "def456"
-            action.recommended.description = None
-
-        mock__set_recommended_for_sha.side_effect = set_recommendation
-
-        with pytest.raises(ValueError, match="Recommended description is None"):
-            action._set_recommended_reference_and_date()
 
     @patch("gh_action_pulse.actions.GithubAction._set_recommended_with_fallback")
     def test__set_recommended_for_sha_branch_without_description_is_skipped(
@@ -1365,4 +1363,211 @@ class TestGithubAction:
 
         action._set_recommended_reference_and_date_to_tag_if_exists([mock_tag_v4])
 
+        assert action.recommended.reference is None
+
+
+OLD_DATE = datetime.datetime(2020, 1, 1, tzinfo=datetime.UTC)
+
+
+def _make_repo(
+    tags: dict[str, str],
+    branches: dict[str, str] | None = None,
+    dates: dict[str, datetime.datetime] | None = None,
+) -> MagicMock:
+    """Build a fake repository from tag -> sha and branch -> sha mappings."""
+    branches = branches or {}
+    dates = dates or {}
+
+    def make_commit(sha: str) -> MagicMock:
+        commit = MagicMock()
+        commit.sha = sha
+        commit.commit.sha = sha
+        commit.commit.committer.date = dates.get(sha, OLD_DATE)
+        return commit
+
+    def make_tag(name: str, sha: str) -> MagicMock:
+        tag = MagicMock()
+        tag.name = name
+        tag.commit = make_commit(sha)
+        return tag
+
+    def get_commit(sha: str) -> MagicMock:
+        resolved = tags.get(sha) or branches.get(sha)
+        if resolved is None and sha in set(tags.values()) | set(branches.values()) | set(dates):
+            resolved = sha
+        if resolved is None:
+            raise GithubException(404, "Not Found")
+        return make_commit(resolved)
+
+    def get_branch(name: str) -> MagicMock:
+        if name not in branches:
+            raise GithubException(404, "Not Found")
+        branch = MagicMock()
+        branch.name = name
+        branch.commit = make_commit(branches[name])
+        return branch
+
+    repo = MagicMock()
+    repo.get_tags.return_value = [make_tag(name, sha) for name, sha in tags.items()]
+    repo.get_commit.side_effect = get_commit
+    repo.get_branch.side_effect = get_branch
+    repo.get_branches.return_value = [get_branch(name) for name in branches]
+    repo.compare.side_effect = GithubException(404, "Not Found")
+    return repo
+
+
+def _recommend(action: GithubAction, repo: MagicMock, min_age: int = 0) -> GithubAction:
+    action.repo = repo
+    action.min_age = min_age
+    action._set_recommended_reference_and_date()
+    return action
+
+
+class TestDegradedRecommendations:
+    """Recommendations when the repository has no usable SemVer tag (issue #176)."""
+
+    PACKAGECLOUD_TAGS: ClassVar[dict[str, str]] = {"v0.9": "sha-09", "v0.6": "sha-06", "v0.5": "sha-05"}
+
+    def test_parse_version_tag_loose_scheme(self) -> None:
+        """Loose versions accept one to three numeric components and a prerelease suffix."""
+        assert str(parse_version_tag("v0.6", "loose")) == "0.6.0"
+        assert str(parse_version_tag("V1", "loose")) == "1.0.0"
+        assert str(parse_version_tag("2-beta.1", "loose")) == "2.0.0-beta.1"
+        assert parse_version_tag("v1.2.3.4", "loose") is None
+        assert parse_version_tag("latest", "loose") is None
+        assert parse_version_tag("v0.6", "semver") is None
+
+    def test_parse_tag_version_rejects_non_version_tag(self) -> None:
+        """Only tags returned by _get_version_tags may be parsed as versions."""
+        action = GithubAction("org/action", "v1")
+        tag = MagicMock()
+        tag.name = "latest"
+
+        with pytest.raises(ValueError, match="is not a version tag"):
+            action._parse_tag_version(tag)
+
+    def test_sha_with_non_semver_tag_comment_upgrades_to_newest_loose_tag(self) -> None:
+        """The issue case: @sha # v0.6 on a repo with only vX.Y tags no longer crashes."""
+        action = GithubAction("computology/packagecloud-github-action", "sha-06", "v0.6", comments=["v0.6"])
+        action.actual.reference_type = "sha"
+        action.actual.description_type = "tag"
+
+        _recommend(action, _make_repo(self.PACKAGECLOUD_TAGS))
+
+        assert action.version_scheme == "loose"
+        assert action.has_version_tags is True
+        assert action.recommended.reference == "sha-09"
+        assert action.recommended.comments == ["v0.9"]
+        assert action.min_age_tag_date == OLD_DATE
+        assert any("falling back to non-SemVer version tags" in warning for warning in action.warnings)
+
+    def test_semver_tags_are_preferred_over_loose_tags(self) -> None:
+        """Loose tags are ignored as soon as one SemVer tag exists."""
+        action = GithubAction("org/action", "v1")
+        action.actual.reference_type = "tag"
+
+        _recommend(action, _make_repo({"v9": "sha-v9", "v1.2.3": "sha-123", "v1": "sha-123"}))
+
+        assert action.version_scheme == "semver"
+        assert action.recommended.reference == "sha-123"
+        assert action.recommended.description == "v1.2.3"
+        assert not action.warnings
+
+    def test_loose_tag_too_young_keeps_pinned_tag_as_sha(self) -> None:
+        """Without an eligible tag, the pinned tag is kept but pinned to its SHA."""
+        young = datetime.datetime.now(datetime.UTC)
+        action = GithubAction("org/action", "v2")
+        action.actual.reference_type = "tag"
+
+        _recommend(action, _make_repo({"v2": "sha-v2"}, dates={"sha-v2": young}), min_age=7)
+
+        assert action.recommended.reference == "sha-v2"
+        assert action.recommended.comments == ["v2"]
+
+    def test_tag_reference_without_version_tag_is_pinned_to_sha(self) -> None:
+        """A non-version tag reference is pinned to its SHA with a warning."""
+        action = GithubAction("org/action", "latest")
+        action.actual.reference_type = "tag"
+
+        _recommend(action, _make_repo({"latest": "sha-latest"}))
+
+        assert action.has_version_tags is False
+        assert action.recommended.reference == "sha-latest"
+        assert action.recommended.comments == ["latest"]
+        assert any("pinning current tag 'latest'" in warning for warning in action.warnings)
+
+    def test_sha_matching_non_version_tags_uses_most_precise_tag(self) -> None:
+        """A bare SHA matching several tags keeps the most precise version-like name."""
+        action = GithubAction("org/action", "sha-x")
+        action.actual.reference_type = "sha"
+
+        _recommend(action, _make_repo({"stable": "sha-x", "release-2024": "sha-x"}))
+
+        assert action.recommended.reference == "sha-x"
+        assert action.recommended.comments == ["release-2024"]
+
+    def test_sha_matching_floating_and_precise_semver_tags_prefers_precise(self) -> None:
+        """SemVer tags that are all too young fall back to the most precise tag at the pinned SHA."""
+        young = datetime.datetime.now(datetime.UTC)
+        action = GithubAction("org/action", "sha-x", comments=["gh-action-pulse: ignore[max-age]"])
+        action.actual.reference_type = "sha"
+        action.actual.description_type = "bullshit"
+
+        _recommend(
+            action,
+            _make_repo({"v1": "sha-x", "v1.2.0": "sha-x"}, dates={"sha-x": young}),
+            min_age=7,
+        )
+
+        assert action.recommended.reference == "sha-x"
+        assert action.recommended.comments == ["v1.2.0", "gh-action-pulse: ignore[max-age]"]
+
+    def test_branch_comment_without_tags_follows_branch(self) -> None:
+        """@sha # branch keeps following the branch when there is no tag at all."""
+        action = GithubAction("org/action", "sha-old", "main", comments=["main"])
+        action.actual.reference_type = "sha"
+        action.actual.description_type = "branch"
+
+        _recommend(action, _make_repo({}, branches={"main": "sha-main"}, dates={"sha-old": OLD_DATE}))
+
+        assert action.recommended.reference == "sha-main"
+        assert action.recommended.comments == ["main"]
+
+    def test_missing_branch_falls_back_to_unchanged_reference(self) -> None:
+        """When nothing can be resolved, the line is kept unchanged instead of crashing."""
+        action = GithubAction("org/action", "sha-old", "gone", comments=["gone", "note"])
+        action.actual.reference_type = "sha"
+        action.actual.description_type = "branch"
+
+        _recommend(action, _make_repo({}, dates={"sha-old": OLD_DATE}))
+
+        assert action.recommended.reference is None
+        assert action.recommended.comments == ["gone", "note"]
+        assert action.get_updated_uses_replacement("sha-old", ["gone", "note"]) is None
+        assert any("keeping the current reference unchanged" in warning for warning in action.warnings)
+
+    def test_sha_tag_comment_unresolvable_falls_back_to_related_branch(self) -> None:
+        """A stale tag comment on a SHA falls back to the newest branch containing that SHA."""
+        action = GithubAction("org/action", "sha-old", "v0.1", comments=["v0.1"])
+        action.actual.reference_type = "sha"
+        action.actual.description_type = "tag"
+        repo = _make_repo({}, branches={"main": "sha-main"}, dates={"sha-old": OLD_DATE})
+        repo.compare.side_effect = None
+        repo.compare.return_value = MagicMock(status="behind")
+
+        _recommend(action, repo)
+
+        assert action.recommended.reference == "sha-main"
+        assert action.recommended.comments == ["main"]
+        assert any("newest branch containing" in warning for warning in action.warnings)
+
+    def test_related_branch_search_is_not_repeated(self) -> None:
+        """A bare SHA with no tag and no related branch is searched only once."""
+        action = GithubAction("org/action", "sha-old")
+        action.actual.reference_type = "sha"
+        repo = _make_repo({}, branches={"main": "sha-main"}, dates={"sha-old": OLD_DATE})
+
+        _recommend(action, repo)
+
+        assert repo.compare.call_count == 1
         assert action.recommended.reference is None

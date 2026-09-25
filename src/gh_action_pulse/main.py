@@ -32,7 +32,7 @@ from rich.table import Table
 from rich.text import Text
 
 from gh_action_pulse import __version__
-from gh_action_pulse.actions import GithubAction, GithubActionArchivedError
+from gh_action_pulse.actions import GithubAction, GithubActionArchivedError, GithubActionReferenceNotFoundError
 from gh_action_pulse.full_list_of_existing_actions import FullListOfExistingActions
 from gh_action_pulse.helpers.console import console, error, format_status_with_ignored, phase_status
 from gh_action_pulse.helpers.constants import (
@@ -43,6 +43,7 @@ from gh_action_pulse.helpers.constants import (
     DEFAULT_MIN_AGE,
     DEFAULT_MINIMUM_NODEJS_VERSION,
     GITHUB_TOKEN_ERROR_EXIT_CODE,
+    INVALID_REFERENCE_ERROR_EXIT_CODE,
     MAX_MIN_AGE,
     NODEJS_VERSION_ERROR_EXIT_CODE,
     SEARCH_CONFIGS,
@@ -55,7 +56,7 @@ from gh_action_pulse.nodejs_version import (
     NodeVersionViolation,
     report_node_version_violations,
 )
-from gh_action_pulse.uniq_actions import UniqGithubActions
+from gh_action_pulse.uniq_actions import GithubActionReferencesNotFoundError, UniqGithubActions
 
 logger = logging.getLogger(__name__)
 app = typer.Typer()
@@ -403,6 +404,56 @@ def report_overridden_settings(overridden_settings: list[OverriddenSetting]) -> 
     console.print(table)
 
 
+def find_uses_locations(results: dict[Path, list[dict[int, str]]], name: str, reference: str) -> list[str]:
+    """Return the `file:line` locations of every uses-line pointing at name@reference."""
+    locations: list[str] = []
+    for file, matches in results.items():
+        for match_dict in matches:
+            for line_number, line in match_dict.items():
+                match = USES_LINE_PATTERN.search(line)
+                if match and match.group("name") == name and match.group("reference") == reference:
+                    locations.append(f"{file}:{line_number}")
+    return locations
+
+
+def report_invalid_references(
+    errors: list[GithubActionReferenceNotFoundError],
+    results: dict[Path, list[dict[int, str]]],
+) -> None:
+    """Display every uses-line reference that does not exist upstream, with its locations."""
+    table = Table(title="Invalid references", show_header=True, header_style="red")
+    table.add_column("Action")
+    table.add_column("Reference")
+    table.add_column("Used in")
+    for exc in errors:
+        locations = find_uses_locations(results, exc.name, exc.reference)
+        table.add_row(exc.name, Text(exc.reference), Text("\n".join(locations) or "-"))
+        logger.error(
+            "%s Used in: %s. Fix the typo, or pin an existing branch, tag or commit SHA.",
+            exc,
+            ", ".join(locations) or "unknown location",
+        )
+    console.print(table)
+
+
+def report_degraded_recommendations(actions: list[GithubAction]) -> list[GithubAction]:
+    """Display actions whose recommendation could not follow the SemVer rules; return them."""
+    degraded = sorted(
+        (action for action in actions if action.warnings),
+        key=lambda item: (item.name, item.actual.reference),
+    )
+    if not degraded:
+        return []
+
+    table = Table(title="Degraded recommendations", show_header=True, header_style="yellow")
+    table.add_column("Action")
+    table.add_column("Detail")
+    for action in degraded:
+        table.add_row(f"{action.name}@{action.actual.reference}", Text("\n".join(action.warnings)))
+    console.print(table)
+    return degraded
+
+
 def warn_about_stale_actions(
     stale_actions: list[GithubAction],
     max_age: int,
@@ -439,11 +490,11 @@ def warn_about_stale_actions(
 
     for action in stale_actions:
         limit = action.effective_max_age(max_age)
-        if not action.has_semver_tags:
-            detail = f"No semver tag found; cannot verify freshness within {limit} days."
+        if not action.has_version_tags:
+            detail = f"No version tag found; cannot verify freshness within {limit} days."
             table.add_row(action.name, detail)
             logger.warning(
-                "No semver tag found for action '%s'; cannot verify tag freshness within %d days.",
+                "No version tag found for action '%s'; cannot verify tag freshness within %d days.",
                 action.name,
                 limit,
             )
@@ -469,6 +520,7 @@ def _print_summary(  # noqa: PLR0913
     overridden_settings: list[OverriddenSetting],
     dry_run: bool,
     exit_code: int,
+    degraded_actions: list[GithubAction] | None = None,
 ) -> None:
     """Print a final Rich Panel summarizing the run outcome."""
     parts: list[str] = []
@@ -485,6 +537,8 @@ def _print_summary(  # noqa: PLR0913
         parts.append(
             f"{len(node_version_violations)} Node.js violation{'s' if len(node_version_violations) != 1 else ''}"
         )
+    if degraded_actions:
+        parts.append(f"{len(degraded_actions)} degraded recommendation{'s' if len(degraded_actions) != 1 else ''}")
     if ignored_checks:
         parts.append(f"{len(ignored_checks)} ignored check{'s' if len(ignored_checks) != 1 else ''}")
     if overridden_settings:
@@ -603,6 +657,21 @@ def main(
             exit_code=ARCHIVED_ACTION_ERROR_EXIT_CODE,
         )
         raise typer.Exit(code=ARCHIVED_ACTION_ERROR_EXIT_CODE) from None
+    except GithubActionReferencesNotFoundError as exc:
+        error(f"{len(exc.errors)} action reference(s) do not exist upstream.")
+        report_invalid_references(exc.errors, results)
+        _print_summary(
+            update_result=UpdateResult(),
+            stale_actions=[],
+            node_version_violations=[],
+            ignored_checks=[],
+            overridden_settings=[],
+            dry_run=dry_run,
+            exit_code=INVALID_REFERENCE_ERROR_EXIT_CODE,
+        )
+        raise typer.Exit(code=INVALID_REFERENCE_ERROR_EXIT_CODE) from None
+
+    degraded_actions = report_degraded_recommendations(list(uniq_github_actions.get_actions()))
 
     stale_started = time.perf_counter()
     stale_actions = uniq_github_actions.get_stale_actions(max_age_in_days)
@@ -647,6 +716,7 @@ def main(
             overridden_settings=overridden_settings,
             dry_run=dry_run,
             exit_code=NODEJS_VERSION_ERROR_EXIT_CODE,
+            degraded_actions=degraded_actions,
         )
         raise typer.Exit(code=NODEJS_VERSION_ERROR_EXIT_CODE)
 
@@ -659,6 +729,7 @@ def main(
             overridden_settings=overridden_settings,
             dry_run=dry_run,
             exit_code=STALE_TAG_ERROR_EXIT_CODE,
+            degraded_actions=degraded_actions,
         )
         raise typer.Exit(code=STALE_TAG_ERROR_EXIT_CODE)
 
@@ -670,6 +741,7 @@ def main(
         overridden_settings=overridden_settings,
         dry_run=dry_run,
         exit_code=0,
+        degraded_actions=degraded_actions,
     )
 
 
