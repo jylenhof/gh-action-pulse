@@ -328,7 +328,7 @@ class TestGithubAction:
         mock_repo = MagicMock()
         action.repo = mock_repo
         mock_tag_v4 = MagicMock()
-        mock_tag_v4.commit.commit.sha = "sha-for-v4"
+        mock_tag_v4.commit.sha = "sha-for-v4"
         mock_tag_v4.commit.commit.committer.date = datetime.datetime(2025, 1, 3, tzinfo=datetime.UTC)
         mock_repo.get_commit.return_value = mock_tag_v4.commit
 
@@ -357,7 +357,7 @@ class TestGithubAction:
         action = GithubAction("actions/checkout", target_sha)
         mock_repo = MagicMock()
         mock_sha_v4 = MagicMock()
-        mock_sha_v4.commit.commit.sha = target_sha
+        mock_sha_v4.commit.sha = target_sha
         mock_sha_v4.commit.commit.committer.date = datetime.datetime(2025, 1, 3, tzinfo=datetime.UTC)
         mock_repo.get_commit.return_value = mock_sha_v4.commit
         action.repo = mock_repo
@@ -785,9 +785,9 @@ class TestGithubAction:
         action.actual.reference_type = "sha"
         mock_repo = MagicMock()
         mock_tag_v4 = MagicMock()
-        mock_tag_v4.commit.commit.sha = "sha-for-v4"
+        mock_tag_v4.commit.sha = "sha-for-v4"
         mock_tag_v6 = MagicMock()
-        mock_tag_v6.commit.commit.sha = "sha-for-v6"
+        mock_tag_v6.commit.sha = "sha-for-v6"
         mock_repo.get_tags.return_value = [mock_tag_v4, mock_tag_v6]
         mock_repo.get_commit.return_value = MagicMock(commit=MagicMock(sha="sha-for-v4"))
         action.repo = mock_repo
@@ -806,7 +806,7 @@ class TestGithubAction:
         mock_repo = MagicMock()
         mock_repo.get_commit.return_value = MagicMock(commit=MagicMock(sha=full_sha))
         mock_tag = MagicMock()
-        mock_tag.commit.commit.sha = full_sha
+        mock_tag.commit.sha = full_sha
         mock_repo.get_tags.return_value = [mock_tag]
         action.repo = mock_repo
 
