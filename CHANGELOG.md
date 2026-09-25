@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.5.1](https://github.com/jylenhof/gh-action-pulse/compare/v1.5.0...v1.5.1) (2026-09-25)
+
+
+### Bug Fixes
+
+* **actions:** degrade gracefully when no SemVer tag is usable ([#256](https://github.com/jylenhof/gh-action-pulse/issues/256)) ([1dca47a](https://github.com/jylenhof/gh-action-pulse/commit/1dca47a81adce2047da28ba95cf90985df7a8a86))
+
+
+### Performance Improvements
+
+* **actions:** avoid redundant commit fetch & update codeql-action ([#254](https://github.com/jylenhof/gh-action-pulse/issues/254)) ([4f54306](https://github.com/jylenhof/gh-action-pulse/commit/4f543065e99808d5816a831acd276cd2214f79b4))
+
 ## [1.5.0](https://github.com/jylenhof/gh-action-pulse/compare/v1.4.1...v1.5.0) (2026-09-21)
 
 
