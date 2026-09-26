@@ -22,7 +22,7 @@ from typing import TYPE_CHECKING, ClassVar, Literal
 from unittest.mock import MagicMock, patch
 
 import pytest
-from github.GithubException import GithubException
+from github.GithubException import GithubException, UnknownObjectException
 from testfixtures import LogCapture, log_capture
 
 from gh_action_pulse.actions import (
@@ -230,6 +230,15 @@ class TestGithubAction:
         mock_g.get_repo.return_value = mock_repo
 
         with pytest.raises(GithubActionArchivedError, match=r"actions/checkout.*archived"):
+            action.get_fully_qualified(mock_g, 0)
+
+    def test_get_fully_qualified_raises_reference_not_found_for_missing_repo(self) -> None:
+        """A repository that does not exist upstream is reported instead of crashing."""
+        action = GithubAction("does-not/exist", "v1")
+        mock_g = MagicMock()
+        mock_g.get_repo.side_effect = UnknownObjectException(404, "Not Found", None)
+
+        with pytest.raises(GithubActionReferenceNotFoundError, match=r"does-not/exist"):
             action.get_fully_qualified(mock_g, 0)
 
     def test_get_fully_qualified_sets_repo_canonical_name_on_repo_redirect(self) -> None:
@@ -887,7 +896,7 @@ class TestGithubAction:
 
         def compare_side_effect(_base: str, head: str) -> MagicMock:
             comparison = MagicMock()
-            comparison.status = "behind" if head in {"sha-for-main-new", "sha-for-develop"} else "diverged"
+            comparison.status = "ahead" if head in {"sha-for-main-new", "sha-for-develop"} else "diverged"
             return comparison
 
         mock_repo.compare.side_effect = compare_side_effect
@@ -1553,7 +1562,7 @@ class TestDegradedRecommendations:
         action.actual.description_type = "tag"
         repo = _make_repo({}, branches={"main": "sha-main"}, dates={"sha-old": OLD_DATE})
         repo.compare.side_effect = None
-        repo.compare.return_value = MagicMock(status="behind")
+        repo.compare.return_value = MagicMock(status="ahead")
 
         _recommend(action, repo)
 

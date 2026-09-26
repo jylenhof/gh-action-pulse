@@ -133,3 +133,25 @@ class TestUsesLineHelpers:
     def test_skips_local_action_without_reference(self) -> None:
         """Local `./` actions without `@` are not uses-line matches."""
         assert USES_LINE_PATTERN.search("uses: ./local-action") is None
+
+    def test_strips_double_quotes_around_the_value(self) -> None:
+        """A double-quoted `uses:` value yields an unquoted action name and reference."""
+        match = USES_LINE_PATTERN.search('        uses: "google-github-actions/auth@fc217480"')
+        assert match is not None
+        assert match.group("name") == "google-github-actions/auth"
+        assert match.group("reference") == "fc217480"
+
+    def test_strips_single_quotes_around_the_value(self) -> None:
+        """A single-quoted `uses:` value yields an unquoted action name and reference."""
+        match = USES_LINE_PATTERN.search("  - uses: 'actions/checkout@v4'")
+        assert match is not None
+        assert match.group("name") == "actions/checkout"
+        assert match.group("reference") == "v4"
+
+    def test_matches_quoted_value_with_trailing_comment(self) -> None:
+        """A trailing comment after a quoted value is still captured without the closing quote."""
+        match = USES_LINE_PATTERN.search('        uses: "actions/checkout@abc123"  # v4.2.2')
+        assert match is not None
+        assert match.group("name") == "actions/checkout"
+        assert match.group("reference") == "abc123"
+        assert match.group("comments") == "v4.2.2"
