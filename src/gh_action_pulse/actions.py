@@ -423,7 +423,32 @@ class GithubAction:  # pylint: disable=too-many-instance-attributes
                     self._set_recommended_reference_and_date_to_tag_if_exists(version_tags)
                     return
 
+                if self._set_recommended_to_tag_containing_sha(version_tags):
+                    return
+
                 self._set_recommended_to_latest_related_branch()
+
+    def _sha_is_contained_in(self, head: str) -> bool:
+        """Return True when the pinned SHA is an ancestor of (or identical to) `head`."""
+        try:
+            comparison = self.repo.compare(self.actual.reference, head)
+        except GithubException:
+            return False
+        # compare(base=pinned SHA, head): head contains the SHA when it is "ahead" of it or "identical".
+        return comparison.status in ("ahead", "identical")
+
+    def _set_recommended_to_tag_containing_sha(self, version_tags: Sequence[Tag]) -> bool:
+        """Recommend the selected version tag when its history contains the pinned SHA."""
+        if not version_tags:
+            return False
+        self._set_recommended_reference_and_date_to_tag_if_exists(version_tags)
+        if self.recommended.reference is not None and self._sha_is_contained_in(self.recommended.reference):
+            return True
+        self.recommended.reference = None
+        self.recommended.date = None
+        self.recommended.description = None
+        self.min_age_tag_date = None
+        return False
 
     def _tags_matching_actual_sha(self) -> list[Tag]:
         """Return the tags pointing at the pinned SHA (short SHAs are resolved first)."""
@@ -521,19 +546,22 @@ class GithubAction:  # pylint: disable=too-many-instance-attributes
             logger.exception("Failed to fetch branch '%s', that should not happen.", branch_name)
 
     def _set_recommended_to_latest_related_branch(self) -> None:
-        """Recommend the newest branch tip among branches that contain the pinned SHA."""
+        """Recommend the default branch when it contains the pinned SHA, else the newest branch containing it."""
         self._related_branch_searched = True
+        default_branch = getattr(self.repo, "default_branch", None)
+        if isinstance(default_branch, str) and default_branch:
+            try:
+                default_tip = self.repo.get_branch(default_branch).commit.sha
+            except GithubException:
+                default_tip = None
+            if default_tip is not None and self._sha_is_contained_in(default_tip):
+                self._set_recommended_to_branch(default_branch)
+                return
         try:
             latest_branch = None
             latest_date = None
             for branch in self.repo.get_branches():
-                try:
-                    comparison = self.repo.compare(self.actual.reference, branch.commit.sha)
-                except GithubException:
-                    continue
-                # compare(base=pinned SHA, head=branch tip): the branch contains the SHA when its
-                # tip is "ahead" of (a descendant of) the SHA, or "identical" to it.
-                if comparison.status not in ("ahead", "identical"):
+                if branch.name == default_branch or not self._sha_is_contained_in(branch.commit.sha):
                     continue
                 branch_date = branch.commit.commit.committer.date
                 if latest_date is None or branch_date > latest_date:

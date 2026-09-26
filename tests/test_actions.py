@@ -786,8 +786,109 @@ class TestGithubAction:
 
         action._set_recommended_for_sha(mock_valid_semver_tags)
 
-        mock__set_recommended_reference_and_date_to_tag_if_exists.assert_not_called()
+        # The tag lookup is tried first but yields nothing, so the related branch search runs.
+        mock__set_recommended_reference_and_date_to_tag_if_exists.assert_called_once_with(mock_valid_semver_tags)
         mock__set_recommended_to_latest_related_branch.assert_called_once_with()
+
+    def test__set_recommended_for_sha_prefers_tag_containing_sha(self) -> None:
+        """A bare SHA contained in the newest version tag's history is bumped to that tag (issue #261)."""
+        action = GithubAction("open-security-tools/ost-simple-sts", "sha-on-main", None)
+        mock_repo = MagicMock()
+        mock_tag = MagicMock()
+        mock_tag.name = "v0.0.5"
+        mock_tag.commit.sha = "sha-for-v0.0.5"
+        mock_tag.commit.commit.committer.date = datetime.datetime(2020, 1, 1, tzinfo=datetime.UTC)
+        mock_repo.get_tags.return_value = [mock_tag]
+        mock_repo.compare.return_value = MagicMock(status="ahead")
+        action.repo = mock_repo
+        action.actual.reference_type = "sha"
+        action.actual.description_type = None
+        action.min_age = 0
+
+        action._set_recommended_for_sha([mock_tag])
+
+        assert action.recommended.reference == "sha-for-v0.0.5"
+        assert action.recommended.description == "v0.0.5"
+        mock_repo.compare.assert_called_once_with("sha-on-main", "sha-for-v0.0.5")
+        mock_repo.get_branches.assert_not_called()
+
+    def test__set_recommended_for_sha_ignores_tag_not_containing_sha(self) -> None:
+        """A tag whose history does not contain the SHA is discarded in favour of a related branch."""
+        action = GithubAction("owner/repo", "sha-on-feature", None)
+        mock_repo = MagicMock()
+        mock_tag = MagicMock()
+        mock_tag.name = "v1.0.0"
+        mock_tag.commit.sha = "sha-for-v1.0.0"
+        mock_tag.commit.commit.committer.date = datetime.datetime(2020, 1, 1, tzinfo=datetime.UTC)
+        mock_repo.get_tags.return_value = [mock_tag]
+        mock_repo.compare.return_value = MagicMock(status="diverged")
+        mock_repo.get_branches.return_value = []
+        action.repo = mock_repo
+        action.actual.reference_type = "sha"
+        action.actual.description_type = None
+        action.min_age = 0
+
+        action._set_recommended_for_sha([mock_tag])
+
+        assert action.recommended.reference is None
+        assert action.recommended.description is None
+        assert action.min_age_tag_date is None
+
+    def test__set_recommended_to_latest_related_branch_prefers_default_branch(self) -> None:
+        """The default branch wins over a newer feature branch when both contain the SHA (issue #261)."""
+        action = GithubAction("astral-sh/github-actions/release-smoke-test", "sha-on-main", None)
+        mock_repo = MagicMock()
+        mock_repo.default_branch = "main"
+        mock_main = MagicMock()
+        mock_main.name = "main"
+        mock_main.commit.sha = "sha-for-main"
+        mock_repo.get_branch.return_value = mock_main
+        mock_repo.compare.return_value = MagicMock(status="ahead")
+        action.repo = mock_repo
+
+        action._set_recommended_to_latest_related_branch()
+
+        assert action.recommended.reference == "sha-for-main"
+        assert action.recommended.description == "main"
+        mock_repo.get_branches.assert_not_called()
+
+    def test__set_recommended_to_latest_related_branch_default_branch_not_containing_sha(self) -> None:
+        """When the default branch does not contain the SHA, the newest other branch containing it is used."""
+        action = GithubAction("owner/repo", "sha-on-feature", None)
+        mock_repo = MagicMock()
+        mock_repo.default_branch = "main"
+        mock_main = MagicMock()
+        mock_main.name = "main"
+        mock_main.commit.sha = "sha-for-main"
+        mock_feature = MagicMock()
+        mock_feature.name = "feature"
+        mock_feature.commit.sha = "sha-for-feature"
+        mock_feature.commit.commit.committer.date = datetime.datetime(2026, 1, 3, tzinfo=datetime.UTC)
+        mock_repo.get_branches.return_value = [mock_main, mock_feature]
+        mock_repo.get_branch.side_effect = lambda name: {"main": mock_main, "feature": mock_feature}[name]
+        mock_repo.compare.side_effect = lambda _base, head: MagicMock(
+            status="ahead" if head == "sha-for-feature" else "diverged"
+        )
+        action.repo = mock_repo
+
+        action._set_recommended_to_latest_related_branch()
+
+        assert action.recommended.reference == "sha-for-feature"
+        assert action.recommended.description == "feature"
+
+    def test__set_recommended_to_latest_related_branch_default_branch_unreadable(self) -> None:
+        """A default branch that cannot be fetched falls back to scanning every branch."""
+        action = GithubAction("owner/repo", "sha-on-feature", None)
+        mock_repo = MagicMock()
+        mock_repo.default_branch = "main"
+        mock_repo.get_branch.side_effect = GithubException(404, "Not Found", None)
+        mock_repo.get_branches.return_value = []
+        action.repo = mock_repo
+
+        action._set_recommended_to_latest_related_branch()
+
+        assert action.recommended.reference is None
+        mock_repo.get_branches.assert_called_once_with()
 
     def test__set_recommended_for_sha_tag_related_without_eligible_tag_does_not_fallback(self) -> None:
         """Tag-related SHAs must not fall back to a branch when no semver tag is eligible."""
