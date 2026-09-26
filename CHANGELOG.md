@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.5.3](https://github.com/jylenhof/gh-action-pulse/compare/v1.5.2...v1.5.3) (2026-09-26)
+
+
+### Bug Fixes
+
+* **actions:** prefer containing tag and default branch for bare SHA pins ([#261](https://github.com/jylenhof/gh-action-pulse/issues/261)) ([#262](https://github.com/jylenhof/gh-action-pulse/issues/262)) ([c1acb21](https://github.com/jylenhof/gh-action-pulse/commit/c1acb2111dc5f38105c4683a46f3702f0d6bbaa4))
+
 ## [1.5.2](https://github.com/jylenhof/gh-action-pulse/compare/v1.5.1...v1.5.2) (2026-09-26)
 
 
