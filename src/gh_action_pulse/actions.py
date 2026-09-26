@@ -24,7 +24,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Literal
 
 import semver
-from github.GithubException import GithubException
+from github.GithubException import GithubException, UnknownObjectException
 
 from gh_action_pulse.helpers.uses_line import (
     ParsedIgnoreHint,
@@ -202,7 +202,11 @@ class GithubAction:  # pylint: disable=too-many-instance-attributes
         # For actions like owner/repo/path@ref, the repo is owner/repo
         repo_name = "/".join(self.name.split("/")[:2])
         logger.debug("Get Repo access to %s (full action name: %s)", repo_name, self.name)
-        self.repo = g.get_repo(repo_name)  # missing exception catch here
+        try:
+            self.repo = g.get_repo(repo_name)
+        except UnknownObjectException as exc:
+            logger.debug("Repository '%s' for action '%s' was not found upstream.", repo_name, self.name)
+            raise GithubActionReferenceNotFoundError(self.name, self.actual.reference) from exc
         self._set_repo_canonical_name(repo_name)
         if self.repo.archived:
             logger.error("GitHub Action repository '%s' is archived.", repo_name)
@@ -527,7 +531,9 @@ class GithubAction:  # pylint: disable=too-many-instance-attributes
                     comparison = self.repo.compare(self.actual.reference, branch.commit.sha)
                 except GithubException:
                     continue
-                if comparison.status not in ("behind", "identical"):
+                # compare(base=pinned SHA, head=branch tip): the branch contains the SHA when its
+                # tip is "ahead" of (a descendant of) the SHA, or "identical" to it.
+                if comparison.status not in ("ahead", "identical"):
                     continue
                 branch_date = branch.commit.commit.committer.date
                 if latest_date is None or branch_date > latest_date:

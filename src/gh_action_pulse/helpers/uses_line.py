@@ -22,8 +22,10 @@ from gh_action_pulse.helpers.constants import ALLOWED_IGNORE_CHECKS, ALLOWED_OVE
 
 USES_LINE_PATTERN = re.compile(
     r"^\s*[-]?\s{0,1}uses:\s*"
-    r"(?P<name>[^@\s]+)@"
-    r"(?P<reference>[^\s#]+)"
+    r"(?P<quote>[\"'])?"  # YAML allows the value to be single- or double-quoted
+    r"(?P<name>[^@\s\"']+)@"
+    r"(?P<reference>[^\s#\"']+)"
+    r"(?P=quote)?"  # matching closing quote, if the value was quoted
     r"(?:\s+#\s+(?P<comments>.+))?"
 )
 
