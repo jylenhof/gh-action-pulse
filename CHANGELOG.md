@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.5.2](https://github.com/jylenhof/gh-action-pulse/compare/v1.5.1...v1.5.2) (2026-09-26)
+
+
+### Bug Fixes
+
+* **actions:** handle quoted uses, missing repos & branch SHA lookup ([#258](https://github.com/jylenhof/gh-action-pulse/issues/258)) ([#259](https://github.com/jylenhof/gh-action-pulse/issues/259)) ([b4c4c56](https://github.com/jylenhof/gh-action-pulse/commit/b4c4c56f1a02d2da07e583ea28bbb2ab0db8493c))
+
 ## [1.5.1](https://github.com/jylenhof/gh-action-pulse/compare/v1.5.0...v1.5.1) (2026-09-25)
 
 
