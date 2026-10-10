@@ -3,10 +3,10 @@
 [tools]  # tombi: format.rules.table-keys-order = "ascending"
 # tools to use on all my projects
 action-validator = "0.9.0"
+"aqua:owenlamont/ryl" = "0.24.0"
 editorconfig-checker = "4.0.2"
 ghalint = "1.5.6"
 jactionlint = "2.0.2"
-pinact = "5.0.0"
 # "pipx:gh-action-pulse" = { version = "latest", uvx = true }
 prek = "0.5.5"
 rumdl = "0.2.78"
@@ -15,5 +15,4 @@ shfmt = "3.14.1"
 tombi = "1.7.3"
 uv = "0.12.23"
 yamlfmt = "0.21.0"
-yamllint = "1.38.0"
 zizmor = "1.30.1"

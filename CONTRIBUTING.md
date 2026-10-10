@@ -126,6 +126,8 @@ Coverage settings live in [`.coveragerc.toml`](.coveragerc.toml).
 | editorconfig-checker | repository files | Enforces [`.editorconfig`](.editorconfig) (configured in [`.editorconfig-checker.json`](.editorconfig-checker.json)) |
 | rumdl | `*.md` | Markdown linting (configured in [`.rumdl.toml`](.rumdl.toml)) |
 | tombi | `*.toml` | TOML formatting and linting |
+| yamlfmt | `*.yml`, `*.yaml` | YAML formatting |
+| ryl | `*.yml`, `*.yaml` | YAML linting |
 | shfmt / shellcheck | shell scripts | Shell formatting and linting |
 | Built-in pre-commit hooks | mixed | Trailing whitespace, EOF, symlinks, YAML, merge conflicts, private keys, executable checks |
 
@@ -138,7 +140,6 @@ These run on workflow, reusable action, and related YAML files:
 | Tool | Scope | Purpose |
 | --- | --- | --- |
 | jactionlint | `.github/workflows/*` | Workflow syntax and expression validation |
-| pinact | `.github/workflows/*`, `.github/actions/**/action.{yml,yaml}` | Pins action references to SHAs |
 | ghalint | `.github/workflows/*`, `.github/actions/**/action.{yml,yaml}` | GitHub Actions workflow linting |
 | zizmor | workflows, reusable actions, [`.github/dependabot.yml`](.github/dependabot.yml), root `action.{yml,yaml}` | Security-oriented workflow analysis |
 

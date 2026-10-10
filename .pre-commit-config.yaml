@@ -61,9 +61,9 @@ repos:
         entry: "yamlfmt"
         language: system
         files: '\.(yml|yaml)$'
-      - id: yamllint
-        name: yamllint
-        entry: "yamllint"
+      - id: ryl
+        name: ryl
+        entry: "ryl"
         language: system
         files: '\.(yml|yaml)$'
 
