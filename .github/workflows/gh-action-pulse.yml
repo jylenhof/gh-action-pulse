@@ -11,11 +11,6 @@ on:
     types: [opened, synchronize, reopened, ready_for_review]
   workflow_dispatch:
     inputs:
-      mise_cache:
-        description: Override mise-action cache option.
-        required: false
-        type: boolean
-        default: true
       mise_version:
         description: Override mise-action version option.
         required: false
@@ -59,8 +54,10 @@ jobs:
         env:
           MISE_INSTALL_FROM_GITHUB: 1
         with:
-          cache: ${{ github.event_name == 'workflow_dispatch' && toJSON(inputs.mise_cache) || vars.MISE_CACHE || 'true' }}
-          cache_key_prefix: mise-v1-gh-action-pulse.yml
+          # Cache disabled: tools installed via the uv/pipx backends break
+          # when restored from the mise cache (upstream issue, not fixed yet):
+          # https://github.com/jdx/mise/discussions/13984
+          cache: false
           version: ${{ inputs.mise_version || vars.MISE_VERSION }}
 
       - name: Run gh-action-pulse

@@ -14,11 +14,6 @@ on:
         description: Comma separated tools to exclude from the upgrade.
         required: false
         default: ''
-      mise_cache:
-        description: Override mise-action cache option.
-        required: false
-        type: boolean
-        default: true
       mise_version:
         description: Override mise-action version option.
         required: false
@@ -62,8 +57,10 @@ jobs:
       - name: Install mise
         uses: jdx/mise-action@7a4e45a543138629540c9a1616d08632b893e492 # v5.0.1
         with:
-          cache: ${{ github.event_name == 'workflow_dispatch' && toJSON(inputs.mise_cache) || vars.MISE_CACHE || 'true' }}
-          cache_key_prefix: mise-v1-mise-update-tool.yml
+          # Cache disabled: tools installed via the uv/pipx backends break
+          # when restored from the mise cache (upstream issue, not fixed yet):
+          # https://github.com/jdx/mise/discussions/13984
+          cache: false
           version: ${{ inputs.mise_version || vars.MISE_VERSION }}
 
       - name: Upgrade local mise tools
