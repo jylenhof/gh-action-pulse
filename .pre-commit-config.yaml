@@ -73,9 +73,9 @@ repos:
         entry: action-validator
         language: system
         files: '\.github/workflows/.*\.(yaml|yml)$'
-      - id: actionlint
-        name: actionlint
-        entry: actionlint
+      - id: jactionlint
+        name: jactionlint
+        entry: jactionlint
         language: system
         files: '\.github/workflows/.*\.(yaml|yml)$'
       #  pinact does not handle branch version
