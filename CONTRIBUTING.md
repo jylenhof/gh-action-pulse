@@ -137,7 +137,7 @@ These run on workflow, reusable action, and related YAML files:
 
 | Tool | Scope | Purpose |
 | --- | --- | --- |
-| actionlint | `.github/workflows/*` | Workflow syntax and expression validation |
+| jactionlint | `.github/workflows/*` | Workflow syntax and expression validation |
 | pinact | `.github/workflows/*`, `.github/actions/**/action.{yml,yaml}` | Pins action references to SHAs |
 | ghalint | `.github/workflows/*`, `.github/actions/**/action.{yml,yaml}` | GitHub Actions workflow linting |
 | zizmor | workflows, reusable actions, [`.github/dependabot.yml`](.github/dependabot.yml), root `action.{yml,yaml}` | Security-oriented workflow analysis |

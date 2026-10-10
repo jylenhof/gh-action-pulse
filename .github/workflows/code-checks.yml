@@ -30,7 +30,7 @@ permissions:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   prek-checks:
@@ -62,11 +62,10 @@ jobs:
         env:
           MISE_INSTALL_FROM_GITHUB: 1
         with:
-          # Disable cache on tag publishes so a poisoned mise cache cannot
-          # be restored into the wheel uploaded to PyPI (zizmor
-          # cache-poisoning). PRs and branch pushes may still cache.
-          cache: ${{ !startsWith(github.ref, 'refs/tags/') }}
-          cache_key_prefix: mise-v1-code-checks.yml
+          # Cache disabled: tools installed via the uv/pipx backends break
+          # when restored from the mise cache (upstream issue, not fixed yet):
+          # https://github.com/jdx/mise/discussions/13984
+          cache: false
           version: ${{ inputs.mise_version || vars.MISE_VERSION }}
 
       - name: Run prek checks
@@ -105,11 +104,10 @@ jobs:
         env:
           MISE_INSTALL_FROM_GITHUB: 1
         with:
-          # Disable cache on tag publishes so a poisoned mise cache cannot
-          # be restored into the wheel uploaded to PyPI (zizmor
-          # cache-poisoning). PRs and branch pushes may still cache.
-          cache: ${{ !startsWith(github.ref, 'refs/tags/') }}
-          cache_key_prefix: mise-v1-code-checks.yml
+          # Cache disabled: tools installed via the uv/pipx backends break
+          # when restored from the mise cache (upstream issue, not fixed yet):
+          # https://github.com/jdx/mise/discussions/13984
+          cache: false
           version: ${{ inputs.mise_version || vars.MISE_VERSION }}
 
       - name: Build wheel distribution file

@@ -3,9 +3,9 @@
 [tools]  # tombi: format.rules.table-keys-order = "ascending"
 # tools to use on all my projects
 action-validator = "0.9.0"
-actionlint = "1.7.12"
 editorconfig-checker = "4.0.2"
 ghalint = "1.5.6"
+jactionlint = "2.0.2"
 pinact = "5.0.0"
 # "pipx:gh-action-pulse" = { version = "latest", uvx = true }
 prek = "0.5.5"
