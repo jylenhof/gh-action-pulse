@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.5.4](https://github.com/jylenhof/gh-action-pulse/compare/v1.5.3...v1.5.4) (2026-10-10)
+
+
+### Documentation
+
+* add AI agent instructions for mise-managed tooling ([#289](https://github.com/jylenhof/gh-action-pulse/issues/289)) ([960dea3](https://github.com/jylenhof/gh-action-pulse/commit/960dea39d1f7246907b83f76aa3a78cac93016d8))
+
 ## [1.5.3](https://github.com/jylenhof/gh-action-pulse/compare/v1.5.2...v1.5.3) (2026-09-26)
 
 
