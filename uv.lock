@@ -449,7 +449,7 @@ crypto = [
 
 [[package]]
 name = "pylint"
-version = "4.1.1"
+version = "4.1.2"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "astroid" },
@@ -460,9 +460,9 @@ dependencies = [
     { name = "platformdirs" },
     { name = "tomlkit" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/7a/ae/e1732157f8b6418532a1a2a733068c5c1ca62790ff8cc320433d2523682e/pylint-4.1.1.tar.gz", hash = "sha256:47538540de0a563ff0b6cb781330944b0c9c1a130986ad1c183116ed37ec4538", size = 1737156, upload-time = "2026-09-29T21:11:13.7Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/19/3c/be4bb2d62e3d1bee3f3aa14af5b294813ad53351cacb3b03fbaf3f851e03/pylint-4.1.2.tar.gz", hash = "sha256:235f13dc418c0041c649b42a5c35c99f2ffc6ca8b6a7574958eac5335906a68a", size = 1739885, upload-time = "2026-10-02T22:49:42.64Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/35/58/0dbfe9e837e70504a133b3ec59d98a5cb77a472e1d2918f1efbe18fffa21/pylint-4.1.1-py3-none-any.whl", hash = "sha256:84901850af1c67240afbe7b0ef696b7ab391ed4838e4ffc48511661026ebc565", size = 585294, upload-time = "2026-09-29T21:11:11.95Z" },
+    { url = "https://files.pythonhosted.org/packages/90/61/b76698429225f848921f4d620f5c7b16f616daf53f99cc25afd1c86496fc/pylint-4.1.2-py3-none-any.whl", hash = "sha256:e34c8636edc7d60a2eaadca4ad6c18a49e202361987a26e81b2a17fa92be28e1", size = 585512, upload-time = "2026-10-02T22:49:40.451Z" },
 ]
 
 [[package]]
@@ -678,11 +678,11 @@ wheels = [
 
 [[package]]
 name = "testfixtures"
-version = "12.3.0"
+version = "12.4.0"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/11/4d/b1c5fae372cd46b7bc1ec1dbca6efecaef8fe1e4edad203cc6e36cd5eafd/testfixtures-12.3.0.tar.gz", hash = "sha256:d807ceb9bdd6ea7cc0663370dd5568339056b35dc15c26effd1ae267e323acf1", size = 201458, upload-time = "2026-07-08T21:32:04.42Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/0c/b8/b1bd3ed5fe7df85ddaaebfd594046610151da623a7b941690c5bd1f2474a/testfixtures-12.4.0.tar.gz", hash = "sha256:cc0108614f88ace8817b587bea06615bdd225fec392ed3de8afabff5d1ef21c7", size = 203049, upload-time = "2026-10-02T14:29:25.434Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/1c/7c/cf6a4bd936b0d8377992a07fe94ae9f6844e728fcfaa006b7ff9e059a038/testfixtures-12.3.0-py3-none-any.whl", hash = "sha256:da013e07f1e850b4d92ea6045c4a71f49d6ddcaab11c8b29f65ea38ff678aee8", size = 69493, upload-time = "2026-07-08T21:32:03.252Z" },
+    { url = "https://files.pythonhosted.org/packages/75/f4/87a93d6b60a24b356460bc960ce36794a5a3accd01e5fe4925d7df983314/testfixtures-12.4.0-py3-none-any.whl", hash = "sha256:621a9a752806989e3dd78229bfc86936256565bb0982736d5ec1b2e59c23229e", size = 69609, upload-time = "2026-10-02T14:29:23.926Z" },
 ]
 
 [[package]]
