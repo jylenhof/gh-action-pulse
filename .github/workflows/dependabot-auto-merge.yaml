@@ -3,9 +3,7 @@ name: Dependabot auto-merge
 
 on: pull_request
 
-permissions:
-  contents: write
-  pull-requests: write
+permissions: {}
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -13,6 +11,9 @@ concurrency:
 
 jobs:
   auto-merge:
+    permissions:
+      contents: write
+      pull-requests: write
     if: github.event.pull_request.user.login == 'dependabot[bot]'
     runs-on: ubuntu-latest
     timeout-minutes: 15
