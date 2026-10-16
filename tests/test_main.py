@@ -64,7 +64,7 @@ from gh_action_pulse.nodejs_version import NodeVersionViolation
 from gh_action_pulse.uniq_actions import GithubActionReferencesNotFoundError, UniqGithubActions
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator
+    from collections.abc import Generator
 
 runner = CliRunner()
 
@@ -862,7 +862,7 @@ class TestMainCommand:
         archived_repo: str | None = None,
         invalid_references: list[GithubActionReferenceNotFoundError] | None = None,
         results: dict[Path, list[dict[int, str]]] | None = None,
-    ) -> Iterator[tuple[MagicMock, MagicMock]]:
+    ) -> Generator[tuple[MagicMock, MagicMock]]:
         with (
             patch("gh_action_pulse.main.get_github_token", return_value="token"),
             patch("gh_action_pulse.main.Github"),
