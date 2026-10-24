@@ -9,7 +9,7 @@ ghalint = "1.5.6"
 jactionlint = "2.1.0"
 # "pipx:gh-action-pulse" = { version = "latest", uvx = true }
 prek = "0.5.5"
-rumdl = "0.2.79"
+rumdl = "0.3.0"
 shellcheck = "0.11.0"
 shfmt = "3.14.1"
 tombi = "1.8.1"
