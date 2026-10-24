@@ -15,7 +15,7 @@
 
 """This script scans GitHub Actions workflow and action definition files for 'uses:' statements."""
 
-import datetime
+import datetime as dt
 import logging
 import re
 import time
@@ -499,7 +499,7 @@ def warn_about_stale_actions(
                 limit,
             )
         elif action.min_age_tag_date is not None:
-            age_days = (datetime.datetime.now(datetime.UTC) - action.min_age_tag_date.astimezone(datetime.UTC)).days
+            age_days = (dt.datetime.now(dt.UTC) - action.min_age_tag_date.astimezone(dt.UTC)).days
             detail = f"{age_days} days old (limit: {limit} days)"
             table.add_row(action.name, detail)
             logger.error(

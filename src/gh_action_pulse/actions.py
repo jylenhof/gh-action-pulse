@@ -17,7 +17,7 @@
 
 from __future__ import annotations
 
-import datetime
+import datetime as dt
 import logging
 import re
 from dataclasses import dataclass, field
@@ -77,7 +77,7 @@ class ActualState:  # pylint: disable=too-many-instance-attributes
     comments: list[str] = field(default_factory=list)
     reference_type: Literal["sha", "tag", "branch", "bullshit"] | None = None
     description_type: Literal["tag", "branch", "bullshit"] | None = None
-    date: datetime.datetime | None = None
+    date: dt.datetime | None = None
     ignore_hint: ParsedIgnoreHint = field(default_factory=ParsedIgnoreHint)
     override_hint: ParsedOverrideHint = field(default_factory=ParsedOverrideHint)
 
@@ -87,7 +87,7 @@ class Recommendation:
     """Metadata about the recommended reference suggested by the API."""
 
     reference: str | None = None
-    date: datetime.datetime | None = None
+    date: dt.datetime | None = None
     description: str | None = None
     comments: list[str] = field(default_factory=list)
     repo_canonical_name: str | None = None
@@ -128,7 +128,7 @@ class GithubAction:  # pylint: disable=too-many-instance-attributes
     recommended: Recommendation
     repo: Repository
     min_age: int
-    min_age_tag_date: datetime.datetime | None = None
+    min_age_tag_date: dt.datetime | None = None
     has_version_tags: bool = False
     version_scheme: VersionScheme | None = None
 
@@ -405,7 +405,7 @@ class GithubAction:  # pylint: disable=too-many-instance-attributes
     def is_tag_fresh(self, max_age: int) -> bool:
         """Return True when the min-age eligible tag is not older than max_age."""
         if self.min_age_tag_date is not None:
-            age = datetime.datetime.now(datetime.UTC) - self.min_age_tag_date.astimezone(datetime.UTC)
+            age = dt.datetime.now(dt.UTC) - self.min_age_tag_date.astimezone(dt.UTC)
             return age.days <= max_age
         return bool(self.has_version_tags)
 
@@ -612,7 +612,7 @@ class GithubAction:  # pylint: disable=too-many-instance-attributes
         return version
 
     @staticmethod
-    def _tag_meets_min_age(tag: Tag, cutoff: datetime.datetime) -> bool:
+    def _tag_meets_min_age(tag: Tag, cutoff: dt.datetime) -> bool:
         return tag.commit.commit.committer.date <= cutoff
 
     def _find_tag_for_version(self, valid_semver_tags: Sequence[Tag], version: semver.Version) -> Tag | None:
@@ -629,7 +629,7 @@ class GithubAction:  # pylint: disable=too-many-instance-attributes
             return value
         return self.min_age
 
-    def _apply_tag_recommendation(self, tag: Tag, cutoff: datetime.datetime) -> None:
+    def _apply_tag_recommendation(self, tag: Tag, cutoff: dt.datetime) -> None:
         tag_date = tag.commit.commit.committer.date
         self.recommended.reference = tag.commit.sha
         self.recommended.date = tag_date
@@ -638,8 +638,8 @@ class GithubAction:  # pylint: disable=too-many-instance-attributes
             self.min_age_tag_date = tag_date
 
     def _set_recommended_reference_and_date_to_tag_if_exists(self, valid_semver_tags: Sequence[Tag]) -> None:
-        now = datetime.datetime.now(datetime.UTC)
-        cutoff = now - datetime.timedelta(days=self._effective_min_age())
+        now = dt.datetime.now(dt.UTC)
+        cutoff = now - dt.timedelta(days=self._effective_min_age())
         self.min_age_tag_date = None
         current_version = self._get_actual_version()
 
