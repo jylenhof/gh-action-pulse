@@ -15,7 +15,7 @@
 
 """Tests for the UniqGithubActions collection."""
 
-import datetime
+import datetime as dt
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -31,13 +31,13 @@ class TestUniqGithubActions:
     @pytest.mark.parametrize(
         ("name", "version", "description", "datecommit"),
         [
-            ("actions/checkout", "v4", "pinned to v4", datetime.datetime(2026, 1, 9, 19, 42, 23, tzinfo=datetime.UTC)),
-            ("actions/setup-python", "v5", None, datetime.datetime(2026, 1, 22, 2, 49, 33, tzinfo=datetime.UTC)),
+            ("actions/checkout", "v4", "pinned to v4", dt.datetime(2026, 1, 9, 19, 42, 23, tzinfo=dt.UTC)),
+            ("actions/setup-python", "v5", None, dt.datetime(2026, 1, 22, 2, 49, 33, tzinfo=dt.UTC)),
         ],
     )
     @patch("gh_action_pulse.uniq_actions.GithubAction.get_fully_qualified")
     def test_get_fully_qualified_attributes(
-        self, mock_get_fq: MagicMock, name: str, version: str, description: str | None, datecommit: datetime.datetime
+        self, mock_get_fq: MagicMock, name: str, version: str, description: str | None, datecommit: dt.datetime
     ) -> None:
         """Verify fully qualified actions include actual and recommended metadata."""
         uniq = UniqGithubActions()
@@ -217,9 +217,9 @@ class TestUniqGithubActions:
         """Verify get_stale_actions returns actions with min-age eligible tags older than the threshold."""
         uniq = UniqGithubActions()
         fresh = GithubAction("actions/checkout", "v4")
-        fresh.min_age_tag_date = datetime.datetime.now(datetime.UTC) - datetime.timedelta(days=10)
+        fresh.min_age_tag_date = dt.datetime.now(dt.UTC) - dt.timedelta(days=10)
         stale = GithubAction("actions/setup-python", "v5")
-        stale.min_age_tag_date = datetime.datetime.now(datetime.UTC) - datetime.timedelta(days=200)
+        stale.min_age_tag_date = dt.datetime.now(dt.UTC) - dt.timedelta(days=200)
         uniq.add(fresh)
         uniq.add(stale)
 
@@ -236,9 +236,9 @@ class TestUniqGithubActions:
             "v5",
             comments=["v5", "gh-action-pulse: ignore[max-age]"],
         )
-        ignored.min_age_tag_date = datetime.datetime.now(datetime.UTC) - datetime.timedelta(days=200)
+        ignored.min_age_tag_date = dt.datetime.now(dt.UTC) - dt.timedelta(days=200)
         stale = GithubAction("actions/checkout", "v4")
-        stale.min_age_tag_date = datetime.datetime.now(datetime.UTC) - datetime.timedelta(days=200)
+        stale.min_age_tag_date = dt.datetime.now(dt.UTC) - dt.timedelta(days=200)
         uniq.add(ignored)
         uniq.add(stale)
 
@@ -255,9 +255,9 @@ class TestUniqGithubActions:
             "v5",
             comments=["v5", "gh-action-pulse: override[max-age=200]"],
         )
-        overridden.min_age_tag_date = datetime.datetime.now(datetime.UTC) - datetime.timedelta(days=180)
+        overridden.min_age_tag_date = dt.datetime.now(dt.UTC) - dt.timedelta(days=180)
         stale = GithubAction("actions/checkout", "v4")
-        stale.min_age_tag_date = datetime.datetime.now(datetime.UTC) - datetime.timedelta(days=180)
+        stale.min_age_tag_date = dt.datetime.now(dt.UTC) - dt.timedelta(days=180)
         uniq.add(overridden)
         uniq.add(stale)
 
@@ -274,9 +274,9 @@ class TestUniqGithubActions:
             "v5",
             comments=["v5", "gh-action-pulse: override[max-age=150]"],
         )
-        overridden.min_age_tag_date = datetime.datetime.now(datetime.UTC) - datetime.timedelta(days=200)
+        overridden.min_age_tag_date = dt.datetime.now(dt.UTC) - dt.timedelta(days=200)
         plain = GithubAction("actions/checkout", "v4")
-        plain.min_age_tag_date = datetime.datetime.now(datetime.UTC) - datetime.timedelta(days=200)
+        plain.min_age_tag_date = dt.datetime.now(dt.UTC) - dt.timedelta(days=200)
         uniq.add(overridden)
         uniq.add(plain)
 
@@ -288,7 +288,7 @@ class TestUniqGithubActions:
         """Verify get_stale_actions skips the check when max_age is 0."""
         uniq = UniqGithubActions()
         stale = GithubAction("actions/setup-python", "v5")
-        stale.min_age_tag_date = datetime.datetime.now(datetime.UTC) - datetime.timedelta(days=200)
+        stale.min_age_tag_date = dt.datetime.now(dt.UTC) - dt.timedelta(days=200)
         uniq.add(stale)
 
         assert not uniq.get_stale_actions(0)

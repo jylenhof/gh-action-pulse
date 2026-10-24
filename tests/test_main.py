@@ -15,7 +15,7 @@
 
 """Tests for CLI validation helpers in main."""
 
-import datetime
+import datetime as dt
 import logging
 from contextlib import contextmanager
 from pathlib import Path
@@ -492,7 +492,7 @@ class TestWarnAboutStaleActions:
         """Actions with an eligible tag older than max_age emit an error."""
         action = GithubAction("actions/example", "v1")
         action.has_version_tags = True
-        action.min_age_tag_date = datetime.datetime.now(datetime.UTC) - datetime.timedelta(days=200)
+        action.min_age_tag_date = dt.datetime.now(dt.UTC) - dt.timedelta(days=200)
 
         with caplog.at_level(logging.ERROR):
             warn_about_stale_actions([action], 150)
@@ -521,7 +521,7 @@ class TestWarnAboutStaleActions:
         """Stale results still mention how many max-age checks were skipped."""
         action = GithubAction("actions/example", "v1")
         action.has_version_tags = True
-        action.min_age_tag_date = datetime.datetime.now(datetime.UTC) - datetime.timedelta(days=200)
+        action.min_age_tag_date = dt.datetime.now(dt.UTC) - dt.timedelta(days=200)
 
         with console.capture() as capture:
             warn_about_stale_actions([action], 150, ignored_count=1)

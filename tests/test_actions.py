@@ -17,7 +17,7 @@
 
 # pylint: disable=too-many-lines
 
-import datetime
+import datetime as dt
 from typing import TYPE_CHECKING, ClassVar, Literal
 from unittest.mock import MagicMock, patch
 
@@ -345,7 +345,7 @@ class TestGithubAction:
         action.repo = mock_repo
         mock_tag_v4 = MagicMock()
         mock_tag_v4.commit.sha = "sha-for-v4"
-        mock_tag_v4.commit.commit.committer.date = datetime.datetime(2025, 1, 3, tzinfo=datetime.UTC)
+        mock_tag_v4.commit.commit.committer.date = dt.datetime(2025, 1, 3, tzinfo=dt.UTC)
         mock_repo.get_commit.return_value = mock_tag_v4.commit
 
         def get_git_ref_side_effect(ref: str) -> MagicMock:
@@ -360,7 +360,7 @@ class TestGithubAction:
         action._set_actual_reference_type_and_date()
 
         assert action.actual.reference_type == "tag"
-        assert action.actual.date == datetime.datetime(2025, 1, 3, tzinfo=datetime.UTC)
+        assert action.actual.date == dt.datetime(2025, 1, 3, tzinfo=dt.UTC)
         assert mock_repo.get_commit.call_count == 1
         mock_repo.get_commit.assert_called_once_with(sha="v4")
         mock_repo.get_git_ref.assert_any_call("heads/v4")
@@ -374,7 +374,7 @@ class TestGithubAction:
         mock_repo = MagicMock()
         mock_sha_v4 = MagicMock()
         mock_sha_v4.commit.sha = target_sha
-        mock_sha_v4.commit.commit.committer.date = datetime.datetime(2025, 1, 3, tzinfo=datetime.UTC)
+        mock_sha_v4.commit.commit.committer.date = dt.datetime(2025, 1, 3, tzinfo=dt.UTC)
         mock_repo.get_commit.return_value = mock_sha_v4.commit
         action.repo = mock_repo
         mock_repo.get_git_ref.side_effect = GithubException(404, "Not Found", None)
@@ -382,7 +382,7 @@ class TestGithubAction:
         action._set_actual_reference_type_and_date()
 
         assert action.actual.reference_type == "sha"
-        assert action.actual.date == datetime.datetime(2025, 1, 3, tzinfo=datetime.UTC)
+        assert action.actual.date == dt.datetime(2025, 1, 3, tzinfo=dt.UTC)
         assert mock_repo.get_commit.call_count == 1
         mock_repo.get_commit.assert_called_once_with(sha=target_sha)
         mock_repo.get_git_ref.assert_any_call(f"heads/{target_sha}")
@@ -395,7 +395,7 @@ class TestGithubAction:
         mock_branch_ref = MagicMock()
         mock_branch_ref.object.sha = "sha-for-main"
         mock_branch_commit = MagicMock()
-        mock_branch_commit.commit.committer.date = datetime.datetime(2025, 1, 3, tzinfo=datetime.UTC)
+        mock_branch_commit.commit.committer.date = dt.datetime(2025, 1, 3, tzinfo=dt.UTC)
         mock_repo.get_git_ref.return_value = mock_branch_ref
         mock_repo.get_commit.return_value = mock_branch_commit
         action.repo = mock_repo
@@ -403,7 +403,7 @@ class TestGithubAction:
         action._set_actual_reference_type_and_date()
 
         assert action.actual.reference_type == "branch"
-        assert action.actual.date == datetime.datetime(2025, 1, 3, tzinfo=datetime.UTC)
+        assert action.actual.date == dt.datetime(2025, 1, 3, tzinfo=dt.UTC)
         mock_repo.get_git_ref.assert_called_once_with("heads/main")
         mock_repo.get_commit.assert_called_once_with(sha="sha-for-main")
 
@@ -414,7 +414,7 @@ class TestGithubAction:
         mock_branch_ref = MagicMock()
         mock_branch_ref.object.sha = "sha-for-main"
         mock_branch_commit = MagicMock()
-        mock_branch_commit.commit.committer.date = datetime.datetime(2026, 1, 3, tzinfo=datetime.UTC)
+        mock_branch_commit.commit.committer.date = dt.datetime(2026, 1, 3, tzinfo=dt.UTC)
 
         def get_git_ref_side_effect(ref: str) -> MagicMock:
             if ref == "heads/main":
@@ -797,7 +797,7 @@ class TestGithubAction:
         mock_tag = MagicMock()
         mock_tag.name = "v0.0.5"
         mock_tag.commit.sha = "sha-for-v0.0.5"
-        mock_tag.commit.commit.committer.date = datetime.datetime(2020, 1, 1, tzinfo=datetime.UTC)
+        mock_tag.commit.commit.committer.date = dt.datetime(2020, 1, 1, tzinfo=dt.UTC)
         mock_repo.get_tags.return_value = [mock_tag]
         mock_repo.compare.return_value = MagicMock(status="ahead")
         action.repo = mock_repo
@@ -819,7 +819,7 @@ class TestGithubAction:
         mock_tag = MagicMock()
         mock_tag.name = "v1.0.0"
         mock_tag.commit.sha = "sha-for-v1.0.0"
-        mock_tag.commit.commit.committer.date = datetime.datetime(2020, 1, 1, tzinfo=datetime.UTC)
+        mock_tag.commit.commit.committer.date = dt.datetime(2020, 1, 1, tzinfo=dt.UTC)
         mock_repo.get_tags.return_value = [mock_tag]
         mock_repo.compare.return_value = MagicMock(status="diverged")
         mock_repo.get_branches.return_value = []
@@ -863,7 +863,7 @@ class TestGithubAction:
         mock_feature = MagicMock()
         mock_feature.name = "feature"
         mock_feature.commit.sha = "sha-for-feature"
-        mock_feature.commit.commit.committer.date = datetime.datetime(2026, 1, 3, tzinfo=datetime.UTC)
+        mock_feature.commit.commit.committer.date = dt.datetime(2026, 1, 3, tzinfo=dt.UTC)
         mock_repo.get_branches.return_value = [mock_main, mock_feature]
         mock_repo.get_branch.side_effect = lambda name: {"main": mock_main, "feature": mock_feature}[name]
         mock_repo.compare.side_effect = lambda _base, head: MagicMock(
@@ -958,14 +958,14 @@ class TestGithubAction:
         mock_repo = MagicMock()
         mock_branch = MagicMock()
         mock_branch.commit.sha = "sha-for-main"
-        mock_branch.commit.commit.committer.date = datetime.datetime(2025, 1, 3, tzinfo=datetime.UTC)
+        mock_branch.commit.commit.committer.date = dt.datetime(2025, 1, 3, tzinfo=dt.UTC)
         mock_repo.get_branch.return_value = mock_branch
         action.repo = mock_repo
 
         action._set_recommended_to_branch("main")
 
         assert action.recommended.reference == "sha-for-main"
-        assert action.recommended.date == datetime.datetime(2025, 1, 3, tzinfo=datetime.UTC)
+        assert action.recommended.date == dt.datetime(2025, 1, 3, tzinfo=dt.UTC)
         assert action.recommended.description == "main"
 
     @log_capture()
@@ -987,11 +987,11 @@ class TestGithubAction:
         mock_main = MagicMock()
         mock_main.name = "main"
         mock_main.commit.sha = "sha-for-main-new"
-        mock_main.commit.commit.committer.date = datetime.datetime(2026, 1, 3, tzinfo=datetime.UTC)
+        mock_main.commit.commit.committer.date = dt.datetime(2026, 1, 3, tzinfo=dt.UTC)
         mock_develop = MagicMock()
         mock_develop.name = "develop"
         mock_develop.commit.sha = "sha-for-develop"
-        mock_develop.commit.commit.committer.date = datetime.datetime(2025, 1, 3, tzinfo=datetime.UTC)
+        mock_develop.commit.commit.committer.date = dt.datetime(2025, 1, 3, tzinfo=dt.UTC)
         mock_repo.get_branches.return_value = [mock_main, mock_develop]
         mock_repo.get_branch.return_value = mock_main
 
@@ -1064,9 +1064,9 @@ class TestGithubAction:
         mock_repo = MagicMock()
         action.repo = mock_repo
         mock_tag_v6 = MagicMock()
-        mock_tag_v6.commit.commit.committer.date = datetime.datetime(2026, 1, 3, tzinfo=datetime.UTC)
-        action.actual.date = datetime.datetime(2025, 1, 3, tzinfo=datetime.UTC)
-        action.recommended.date = datetime.datetime(2026, 1, 3, tzinfo=datetime.UTC)
+        mock_tag_v6.commit.commit.committer.date = dt.datetime(2026, 1, 3, tzinfo=dt.UTC)
+        action.actual.date = dt.datetime(2025, 1, 3, tzinfo=dt.UTC)
+        action.recommended.date = dt.datetime(2026, 1, 3, tzinfo=dt.UTC)
 
         action._set_recommended_with_fallback([mock_tag_v6], "main")
 
@@ -1082,8 +1082,8 @@ class TestGithubAction:
     ) -> None:
         """Branch tips newer than the latest eligible tag should keep the branch recommendation."""
         action = GithubAction("actions/checkout", "main")
-        action.actual.date = datetime.datetime(2026, 6, 1, tzinfo=datetime.UTC)
-        action.recommended.date = datetime.datetime(2025, 1, 3, tzinfo=datetime.UTC)
+        action.actual.date = dt.datetime(2026, 6, 1, tzinfo=dt.UTC)
+        action.recommended.date = dt.datetime(2025, 1, 3, tzinfo=dt.UTC)
         mock_tag_v6 = MagicMock()
 
         action._set_recommended_with_fallback([mock_tag_v6], "main")
@@ -1100,7 +1100,7 @@ class TestGithubAction:
     ) -> None:
         """Equal tag and branch dates should prefer the tag annotation over the branch name."""
         action = GithubAction("actions/checkout", "main")
-        same_date = datetime.datetime(2026, 1, 3, tzinfo=datetime.UTC)
+        same_date = dt.datetime(2026, 1, 3, tzinfo=dt.UTC)
         action.actual.date = same_date
         action.recommended.date = same_date
         mock_tag_v6 = MagicMock()
@@ -1116,16 +1116,16 @@ class TestGithubAction:
         action.min_age = 0
         mock_tag_v4 = MagicMock()
         mock_tag_v4.name = "v4.0.0"
-        mock_tag_v4.commit.commit.committer.date = datetime.datetime(2025, 1, 3, tzinfo=datetime.UTC)
+        mock_tag_v4.commit.commit.committer.date = dt.datetime(2025, 1, 3, tzinfo=dt.UTC)
         mock_tag_v6 = MagicMock()
         mock_tag_v6.name = "v6.0.0"
         mock_tag_v6.commit.sha = "sha-for-v6"
-        mock_tag_v6.commit.commit.committer.date = datetime.datetime(2026, 1, 3, tzinfo=datetime.UTC)
+        mock_tag_v6.commit.commit.committer.date = dt.datetime(2026, 1, 3, tzinfo=dt.UTC)
 
         action._set_recommended_reference_and_date_to_tag_if_exists([mock_tag_v6, mock_tag_v4])
 
         assert action.recommended.reference == "sha-for-v6"
-        assert action.recommended.date == datetime.datetime(2026, 1, 3, tzinfo=datetime.UTC)
+        assert action.recommended.date == dt.datetime(2026, 1, 3, tzinfo=dt.UTC)
         assert action.recommended.description == "v6.0.0"
 
     def test__set_recommended_reference_and_date_to_tag_if_exists_with_no_tags(self) -> None:
@@ -1139,20 +1139,20 @@ class TestGithubAction:
         """Checks that tags newer than the min_age cutoff are not recommended when no version is pinned."""
         action = GithubAction("actions/checkout", "sha-for-main-old", "main")
         action.min_age = 30
-        now = datetime.datetime.now(datetime.UTC)
+        now = dt.datetime.now(dt.UTC)
         mock_tag_v6 = MagicMock()
         mock_tag_v6.name = "v6.0.0"
         mock_tag_v6.commit.sha = "sha-for-v6"
-        mock_tag_v6.commit.commit.committer.date = now - datetime.timedelta(days=29)
+        mock_tag_v6.commit.commit.committer.date = now - dt.timedelta(days=29)
         mock_tag_v4 = MagicMock()
         mock_tag_v4.name = "v4.0.0"
         mock_tag_v4.commit.sha = "sha-for-v4"
-        mock_tag_v4.commit.commit.committer.date = datetime.datetime(2026, 1, 3, tzinfo=datetime.UTC)
+        mock_tag_v4.commit.commit.committer.date = dt.datetime(2026, 1, 3, tzinfo=dt.UTC)
 
         action._set_recommended_reference_and_date_to_tag_if_exists([mock_tag_v6, mock_tag_v4])
 
         assert action.recommended.reference == "sha-for-v4"
-        assert action.recommended.date == datetime.datetime(2026, 1, 3, tzinfo=datetime.UTC)
+        assert action.recommended.date == dt.datetime(2026, 1, 3, tzinfo=dt.UTC)
         assert action.recommended.description == "v4.0.0"
 
     def test__set_recommended_reference_and_date_to_tag_if_exists_honors_min_age_ignore_hint(self) -> None:
@@ -1164,15 +1164,15 @@ class TestGithubAction:
             comments=["main", "gh-action-pulse: ignore[min-age]"],
         )
         action.min_age = 30
-        now = datetime.datetime.now(datetime.UTC)
+        now = dt.datetime.now(dt.UTC)
         mock_tag_v6 = MagicMock()
         mock_tag_v6.name = "v6.0.0"
         mock_tag_v6.commit.sha = "sha-for-v6"
-        mock_tag_v6.commit.commit.committer.date = now - datetime.timedelta(days=29)
+        mock_tag_v6.commit.commit.committer.date = now - dt.timedelta(days=29)
         mock_tag_v4 = MagicMock()
         mock_tag_v4.name = "v4.0.0"
         mock_tag_v4.commit.sha = "sha-for-v4"
-        mock_tag_v4.commit.commit.committer.date = datetime.datetime(2026, 1, 3, tzinfo=datetime.UTC)
+        mock_tag_v4.commit.commit.committer.date = dt.datetime(2026, 1, 3, tzinfo=dt.UTC)
 
         action._set_recommended_reference_and_date_to_tag_if_exists([mock_tag_v6, mock_tag_v4])
 
@@ -1188,15 +1188,15 @@ class TestGithubAction:
             comments=["main", "gh-action-pulse: override[min-age=7]"],
         )
         action.min_age = 30
-        now = datetime.datetime.now(datetime.UTC)
+        now = dt.datetime.now(dt.UTC)
         mock_tag_v6 = MagicMock()
         mock_tag_v6.name = "v6.0.0"
         mock_tag_v6.commit.sha = "sha-for-v6"
-        mock_tag_v6.commit.commit.committer.date = now - datetime.timedelta(days=10)
+        mock_tag_v6.commit.commit.committer.date = now - dt.timedelta(days=10)
         mock_tag_v4 = MagicMock()
         mock_tag_v4.name = "v4.0.0"
         mock_tag_v4.commit.sha = "sha-for-v4"
-        mock_tag_v4.commit.commit.committer.date = datetime.datetime(2026, 1, 3, tzinfo=datetime.UTC)
+        mock_tag_v4.commit.commit.committer.date = dt.datetime(2026, 1, 3, tzinfo=dt.UTC)
 
         action._set_recommended_reference_and_date_to_tag_if_exists([mock_tag_v6, mock_tag_v4])
 
@@ -1212,19 +1212,19 @@ class TestGithubAction:
         )
         action.actual.reference_type = "tag"
         action.min_age = 30
-        now = datetime.datetime.now(datetime.UTC)
+        now = dt.datetime.now(dt.UTC)
         mock_tag_v7 = MagicMock()
         mock_tag_v7.name = "v7.0.0"
         mock_tag_v7.commit.sha = "sha-for-v7"
-        mock_tag_v7.commit.commit.committer.date = now - datetime.timedelta(days=5)
+        mock_tag_v7.commit.commit.committer.date = now - dt.timedelta(days=5)
         mock_tag_v6 = MagicMock()
         mock_tag_v6.name = "v6.0.0"
         mock_tag_v6.commit.sha = "sha-for-v6"
-        mock_tag_v6.commit.commit.committer.date = now - datetime.timedelta(days=29)
+        mock_tag_v6.commit.commit.committer.date = now - dt.timedelta(days=29)
         mock_tag_v4 = MagicMock()
         mock_tag_v4.name = "v4.0.0"
         mock_tag_v4.commit.sha = "sha-for-v4"
-        mock_tag_v4.commit.commit.committer.date = datetime.datetime(2026, 1, 3, tzinfo=datetime.UTC)
+        mock_tag_v4.commit.commit.committer.date = dt.datetime(2026, 1, 3, tzinfo=dt.UTC)
 
         action._set_recommended_reference_and_date_to_tag_if_exists([mock_tag_v7, mock_tag_v6, mock_tag_v4])
 
@@ -1236,15 +1236,15 @@ class TestGithubAction:
         action = GithubAction("actions/checkout", "v6.0.0")
         action.actual.reference_type = "tag"
         action.min_age = 30
-        now = datetime.datetime.now(datetime.UTC)
+        now = dt.datetime.now(dt.UTC)
         mock_tag_v6 = MagicMock()
         mock_tag_v6.name = "v6.0.0"
         mock_tag_v6.commit.sha = "sha-for-v6"
-        mock_tag_v6.commit.commit.committer.date = now - datetime.timedelta(days=29)
+        mock_tag_v6.commit.commit.committer.date = now - dt.timedelta(days=29)
         mock_tag_v4 = MagicMock()
         mock_tag_v4.name = "v4.0.0"
         mock_tag_v4.commit.sha = "sha-for-v4"
-        mock_tag_v4.commit.commit.committer.date = datetime.datetime(2026, 1, 3, tzinfo=datetime.UTC)
+        mock_tag_v4.commit.commit.committer.date = dt.datetime(2026, 1, 3, tzinfo=dt.UTC)
 
         action._set_recommended_reference_and_date_to_tag_if_exists([mock_tag_v6, mock_tag_v4])
 
@@ -1258,15 +1258,15 @@ class TestGithubAction:
         action.actual.reference_type = "sha"
         action.actual.description_type = "tag"
         action.min_age = 30
-        now = datetime.datetime.now(datetime.UTC)
+        now = dt.datetime.now(dt.UTC)
         mock_tag_v6 = MagicMock()
         mock_tag_v6.name = "v6.0.0"
         mock_tag_v6.commit.sha = "sha-for-v6"
-        mock_tag_v6.commit.commit.committer.date = now - datetime.timedelta(days=29)
+        mock_tag_v6.commit.commit.committer.date = now - dt.timedelta(days=29)
         mock_tag_v4 = MagicMock()
         mock_tag_v4.name = "v4.0.0"
         mock_tag_v4.commit.sha = "sha-for-v4"
-        mock_tag_v4.commit.commit.committer.date = datetime.datetime(2026, 1, 3, tzinfo=datetime.UTC)
+        mock_tag_v4.commit.commit.committer.date = dt.datetime(2026, 1, 3, tzinfo=dt.UTC)
 
         action._set_recommended_reference_and_date_to_tag_if_exists([mock_tag_v6, mock_tag_v4])
 
@@ -1279,19 +1279,19 @@ class TestGithubAction:
         action = GithubAction("actions/checkout", "v6.0.0")
         action.actual.reference_type = "tag"
         action.min_age = 30
-        now = datetime.datetime.now(datetime.UTC)
+        now = dt.datetime.now(dt.UTC)
         mock_tag_v7 = MagicMock()
         mock_tag_v7.name = "v7.0.0"
         mock_tag_v7.commit.sha = "sha-for-v7"
-        mock_tag_v7.commit.commit.committer.date = now - datetime.timedelta(days=5)
+        mock_tag_v7.commit.commit.committer.date = now - dt.timedelta(days=5)
         mock_tag_v6 = MagicMock()
         mock_tag_v6.name = "v6.0.0"
         mock_tag_v6.commit.sha = "sha-for-v6"
-        mock_tag_v6.commit.commit.committer.date = now - datetime.timedelta(days=29)
+        mock_tag_v6.commit.commit.committer.date = now - dt.timedelta(days=29)
         mock_tag_v4 = MagicMock()
         mock_tag_v4.name = "v4.0.0"
         mock_tag_v4.commit.sha = "sha-for-v4"
-        mock_tag_v4.commit.commit.committer.date = datetime.datetime(2026, 1, 3, tzinfo=datetime.UTC)
+        mock_tag_v4.commit.commit.committer.date = dt.datetime(2026, 1, 3, tzinfo=dt.UTC)
 
         action._set_recommended_reference_and_date_to_tag_if_exists([mock_tag_v7, mock_tag_v6, mock_tag_v4])
 
@@ -1304,15 +1304,15 @@ class TestGithubAction:
         action = GithubAction("actions/checkout", "v4.0.0")
         action.actual.reference_type = "tag"
         action.min_age = 30
-        now = datetime.datetime.now(datetime.UTC)
+        now = dt.datetime.now(dt.UTC)
         mock_tag_v6 = MagicMock()
         mock_tag_v6.name = "v6.0.0"
         mock_tag_v6.commit.sha = "sha-for-v6"
-        mock_tag_v6.commit.commit.committer.date = now - datetime.timedelta(days=60)
+        mock_tag_v6.commit.commit.committer.date = now - dt.timedelta(days=60)
         mock_tag_v4 = MagicMock()
         mock_tag_v4.name = "v4.0.0"
         mock_tag_v4.commit.sha = "sha-for-v4"
-        mock_tag_v4.commit.commit.committer.date = datetime.datetime(2026, 1, 3, tzinfo=datetime.UTC)
+        mock_tag_v4.commit.commit.committer.date = dt.datetime(2026, 1, 3, tzinfo=dt.UTC)
 
         action._set_recommended_reference_and_date_to_tag_if_exists([mock_tag_v6, mock_tag_v4])
 
@@ -1353,23 +1353,23 @@ class TestGithubAction:
         mock_tag_v6 = MagicMock()
         mock_tag_v6.name = "v6.0.0"
         mock_tag_v6.commit.sha = "sha-for-v6"
-        mock_tag_v6.commit.commit.committer.date = datetime.datetime(2026, 1, 3, tzinfo=datetime.UTC)
+        mock_tag_v6.commit.commit.committer.date = dt.datetime(2026, 1, 3, tzinfo=dt.UTC)
 
         action._set_recommended_reference_and_date_to_tag_if_exists([mock_tag_v6])
 
-        assert action.min_age_tag_date == datetime.datetime(2026, 1, 3, tzinfo=datetime.UTC)
+        assert action.min_age_tag_date == dt.datetime(2026, 1, 3, tzinfo=dt.UTC)
 
     def test_is_tag_fresh_when_within_limit(self) -> None:
         """Verify is_tag_fresh returns True when the min-age eligible tag is within the allowed age."""
         action = GithubAction("actions/checkout", "v4")
-        action.min_age_tag_date = datetime.datetime.now(datetime.UTC) - datetime.timedelta(days=10)
+        action.min_age_tag_date = dt.datetime.now(dt.UTC) - dt.timedelta(days=10)
 
         assert action.is_tag_fresh(150) is True
 
     def test_is_tag_fresh_when_too_old(self) -> None:
         """Verify is_tag_fresh returns False when the min-age eligible tag exceeds the allowed age."""
         action = GithubAction("actions/checkout", "v4")
-        action.min_age_tag_date = datetime.datetime.now(datetime.UTC) - datetime.timedelta(days=151)
+        action.min_age_tag_date = dt.datetime.now(dt.UTC) - dt.timedelta(days=151)
 
         assert action.is_tag_fresh(150) is False
 
@@ -1420,7 +1420,7 @@ class TestGithubAction:
         mock_ok = MagicMock()
         mock_ok.name = "main"
         mock_ok.commit.sha = "sha-new"
-        mock_ok.commit.commit.committer.date = datetime.datetime(2026, 1, 3, tzinfo=datetime.UTC)
+        mock_ok.commit.commit.committer.date = dt.datetime(2026, 1, 3, tzinfo=dt.UTC)
         mock_bad = MagicMock()
         mock_bad.name = "broken"
         mock_bad.commit.sha = "sha-broken"
@@ -1469,20 +1469,20 @@ class TestGithubAction:
         mock_tag_v4 = MagicMock()
         mock_tag_v4.name = "v4.0.0"
         mock_tag_v4.commit.sha = "sha-for-v4"
-        mock_tag_v4.commit.commit.committer.date = datetime.datetime(2026, 1, 3, tzinfo=datetime.UTC)
+        mock_tag_v4.commit.commit.committer.date = dt.datetime(2026, 1, 3, tzinfo=dt.UTC)
 
         action._set_recommended_reference_and_date_to_tag_if_exists([mock_tag_v4])
 
         assert action.recommended.reference is None
 
 
-OLD_DATE = datetime.datetime(2020, 1, 1, tzinfo=datetime.UTC)
+OLD_DATE = dt.datetime(2020, 1, 1, tzinfo=dt.UTC)
 
 
 def _make_repo(
     tags: dict[str, str],
     branches: dict[str, str] | None = None,
-    dates: dict[str, datetime.datetime] | None = None,
+    dates: dict[str, dt.datetime] | None = None,
 ) -> MagicMock:
     """Build a fake repository from tag -> sha and branch -> sha mappings."""
     branches = branches or {}
@@ -1585,7 +1585,7 @@ class TestDegradedRecommendations:
 
     def test_loose_tag_too_young_keeps_pinned_tag_as_sha(self) -> None:
         """Without an eligible tag, the pinned tag is kept but pinned to its SHA."""
-        young = datetime.datetime.now(datetime.UTC)
+        young = dt.datetime.now(dt.UTC)
         action = GithubAction("org/action", "v2")
         action.actual.reference_type = "tag"
 
@@ -1618,7 +1618,7 @@ class TestDegradedRecommendations:
 
     def test_sha_matching_floating_and_precise_semver_tags_prefers_precise(self) -> None:
         """SemVer tags that are all too young fall back to the most precise tag at the pinned SHA."""
-        young = datetime.datetime.now(datetime.UTC)
+        young = dt.datetime.now(dt.UTC)
         action = GithubAction("org/action", "sha-x", comments=["gh-action-pulse: ignore[max-age]"])
         action.actual.reference_type = "sha"
         action.actual.description_type = "bullshit"
