@@ -11,11 +11,11 @@ concurrency:
 
 jobs:
   auto-merge:
+    if: github.event.pull_request.user.login == 'dependabot[bot]'
+    runs-on: ubuntu-latest
     permissions:
       contents: write
       pull-requests: write
-    if: github.event.pull_request.user.login == 'dependabot[bot]'
-    runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
       - name: Dependabot metadata
@@ -24,15 +24,34 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
+      # Only auto-approve when every commit is a verified Dependabot commit:
+      # if someone pushed a fix, the whole change needs a human review.
+      - name: Check all commits are from Dependabot
+        id: commits
+        run: |
+          others=$(gh api --paginate "repos/$REPO/pulls/$PR_NUMBER/commits" \
+            --jq '.[] | select(.author.login != "dependabot[bot]" or .commit.verification.verified != true) | .sha')
+          if [ -n "$others" ]; then
+            echo "Commits not from Dependabot, skipping approval:"
+            echo "$others"
+            echo "only-dependabot=false" >>"${GITHUB_OUTPUT}"
+          else
+            echo "only-dependabot=true" >>"${GITHUB_OUTPUT}"
+          fi
+        env:
+          REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Approve Dependabot PR
-        if: steps.metadata.outputs.update-type != 'version-update:semver-major'
+        if: steps.metadata.outputs.update-type != 'version-update:semver-major' && steps.commits.outputs.only-dependabot == 'true'
         run: gh pr review --approve "$PR_URL"
         env:
           PR_URL: ${{ github.event.pull_request.html_url }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Enable auto-merge for minor/patch updates
-        if: steps.metadata.outputs.update-type != 'version-update:semver-major'
+        if: steps.metadata.outputs.update-type != 'version-update:semver-major' && steps.commits.outputs.only-dependabot == 'true'
         run: gh pr merge --auto --squash "$PR_URL"
         env:
           PR_URL: ${{ github.event.pull_request.html_url }}
