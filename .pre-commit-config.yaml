@@ -25,6 +25,61 @@ repos:
   - repo: local
     hooks:
       # hooks to use on all my projects
+      - id: check-message
+        name: check commit message
+        description: ensures commit message to match regex
+        entry: commit-check
+        stages: [commit-msg]
+        pass_filenames: true
+        language: python
+      - id: check-branch
+        name: check branch name
+        description: ensures branch name to match regex
+        entry: commit-check
+        args: [--branch]
+        pass_filenames: false
+        language: python
+      - id: check-author-name
+        name: check committer name
+        description: ensures committer name to match regex
+        entry: commit-check
+        args: [--author-name]
+        pass_filenames: false
+        language: python
+      - id: check-author-email
+        name: check committer email
+        description: ensures committer email to match regex
+        entry: commit-check
+        args: [--author-email]
+        pass_filenames: false
+        language: python
+      - id: check-no-force-push
+        name: check no force push
+        description: prevents force pushes to remote branches
+        entry: commit-check
+        args: [--no-force-push]
+        stages: [pre-push]
+        pass_filenames: false
+        always_run: true
+        language: python
+      - id: check-tag
+        name: check tag name
+        description: ensures pushed tag names match regex
+        entry: commit-check
+        args: [--tag]
+        stages: [pre-push]
+        pass_filenames: false
+        always_run: true
+        language: python
+      - id: check-files
+        name: check committed files
+        description: ensures committed files respect size, path pattern and path length policies
+        entry: commit-check
+        args: [--files]
+        stages: [pre-push]
+        pass_filenames: false
+        always_run: true
+        language: python
       - id: editorconfig-checker # editorconfig-checker config
         name: editorconfig-checker
         entry: editorconfig-checker
