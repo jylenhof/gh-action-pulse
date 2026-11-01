@@ -1,0 +1,33 @@
+indent-width = 2
+
+[files]
+yaml = [
+  "*.yaml",
+  "*.yml",
+]
+
+[lint.rules]
+anchors = "enable"
+key-duplicates = "enable"
+truthy = "enable"
+
+[lint.rules.comments]
+level = "error"
+require-starting-space = false
+ignore-shebangs = true
+min-spaces-from-content = -1
+max-spaces-from-content = -1
+
+[lint.rules.line-length]
+level = "warning"
+max = 120
+
+[lint.per-file-ignores]
+".github/workflows/*" = ["truthy"]
+"README.md" = ["truthy"]
+
+[format]
+comment-starting-space = "preserve"
+quote-style = "preserve"
+line-ending = "lf"
+comment-spacing = 1

@@ -17,8 +17,6 @@ repos:
       - id: check-merge-conflict
       - id: check-shebang-scripts-are-executable
       - id: check-symlinks
-      - id: check-yaml
-        args: [--allow-multiple-documents]
       - id: destroyed-symlinks
       - id: detect-private-key
       - id: end-of-file-fixer
@@ -56,16 +54,30 @@ repos:
         entry: "tombi lint"
         language: system
         files: '\.toml$'
-      - id: yamlfmt
-        name: yamlfmt
-        entry: "yamlfmt"
-        language: system
-        files: '\.(yml|yaml)$'
-      - id: ryl
-        name: ryl
-        entry: "ryl"
-        language: system
-        files: '\.(yml|yaml)$'
+      - id: ryl-check
+        name: ryl check
+        description: Lint YAML files with ryl
+        entry: ryl check
+        language: python
+        types: [yaml]
+      - id: ryl-check-markdown
+        name: ryl check (markdown)
+        description: Lint YAML embedded in Markdown (front matter + fenced yaml blocks)
+        entry: ryl check --markdown
+        language: python
+        files: \.(md|markdown|mdx|qmd|Rmd)$
+      - id: ryl-format
+        name: ryl format
+        description: Format YAML files with ryl
+        entry: ryl format
+        language: python
+        types: [yaml]
+      - id: ryl-format-markdown
+        name: ryl format (markdown)
+        description: Format YAML embedded in Markdown (front matter + fenced yaml blocks)
+        entry: ryl format --markdown
+        language: python
+        files: \.(md|markdown|mdx|qmd|Rmd)$
 
       # github actions and workflows
       - id: action-validator
