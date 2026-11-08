@@ -24,16 +24,39 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
+      # Start from a clean state: dismiss any approval previously given by this
+      # workflow and disable auto-merge, so a PR that no longer qualifies
+      # (e.g. new human commits) does not keep a stale approval or get merged.
+      - name: Reset previous automated approvals and auto-merge
+        run: |
+          ids=$(gh api --paginate "repos/${REPO}/pulls/${PR_NUMBER}/reviews" \
+            --jq '.[] | select(.user.login == "github-actions[bot]" and .state == "APPROVED") | .id')
+          for id in ${ids}; do
+            echo "Dismissing review ${id}"
+            gh api --method PUT "repos/${REPO}/pulls/${PR_NUMBER}/reviews/${id}/dismissals" \
+              -f message="Dismissed by Dependabot auto-merge workflow, re-evaluating." \
+              -f event=DISMISS >/dev/null
+          done
+          if [ -n "$(gh pr view "${PR_URL}" --json autoMergeRequest --jq '.autoMergeRequest // empty')" ]; then
+            echo "Disabling auto-merge"
+            gh pr merge --disable-auto "${PR_URL}"
+          fi
+        env:
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       # Only auto-approve when every commit is a verified Dependabot commit:
       # if someone pushed a fix, the whole change needs a human review.
       - name: Check all commits are from Dependabot
         id: commits
         run: |
-          others=$(gh api --paginate "repos/$REPO/pulls/$PR_NUMBER/commits" \
+          others=$(gh api --paginate "repos/${REPO}/pulls/${PR_NUMBER}/commits" \
             --jq '.[] | select(.author.login != "dependabot[bot]" or .commit.verification.verified != true) | .sha')
-          if [ -n "$others" ]; then
+          if [ -n "${others}" ]; then
             echo "Commits not from Dependabot, skipping approval:"
-            echo "$others"
+            echo "${others}"
             echo "only-dependabot=false" >>"${GITHUB_OUTPUT}"
           else
             echo "only-dependabot=true" >>"${GITHUB_OUTPUT}"
@@ -44,6 +67,8 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Approve Dependabot PR
+        id: approve
+        continue-on-error: true
         if: steps.metadata.outputs.update-type != 'version-update:semver-major' && steps.commits.outputs.only-dependabot == 'true'
         run: gh pr review --approve "$PR_URL"
         env:
@@ -51,8 +76,35 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Enable auto-merge for minor/patch updates
-        if: steps.metadata.outputs.update-type != 'version-update:semver-major' && steps.commits.outputs.only-dependabot == 'true'
+        id: merge
+        continue-on-error: true
+        if: steps.approve.outcome == 'success'
         run: gh pr merge --auto --squash "$PR_URL"
         env:
           PR_URL: ${{ github.event.pull_request.html_url }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # Never fail the workflow because the PR was not auto-approved:
+      # surface the reason as a warning annotation instead.
+      - name: Report outcome
+        if: always()
+        run: |
+          if [ "${APPROVE}" = "success" ] && [ "${MERGE}" = "success" ]; then
+            echo "PR approved and auto-merge enabled."
+          elif [ "${UPDATE_TYPE}" = "version-update:semver-major" ]; then
+            echo "::warning title=Not auto-approved::Major update (${DEPENDENCY}), manual review required."
+          elif [ "${ONLY_DEPENDABOT}" != "true" ]; then
+            echo "::warning title=Not auto-approved::PR contains commits not from Dependabot, manual review required."
+          elif [ "${APPROVE}" = "failure" ]; then
+            echo "::warning title=Not auto-approved::Approval step failed, manual review required."
+          elif [ "${MERGE}" = "failure" ]; then
+            echo "::warning title=Auto-merge not enabled::PR approved but enabling auto-merge failed."
+          else
+            echo "::warning title=Not auto-approved::PR was not auto-approved, manual review required."
+          fi
+        env:
+          APPROVE: ${{ steps.approve.outcome }}
+          MERGE: ${{ steps.merge.outcome }}
+          UPDATE_TYPE: ${{ steps.metadata.outputs.update-type }}
+          DEPENDENCY: ${{ steps.metadata.outputs.dependency-names }}
+          ONLY_DEPENDABOT: ${{ steps.commits.outputs.only-dependabot }}
