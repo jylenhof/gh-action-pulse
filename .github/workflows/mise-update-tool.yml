@@ -20,12 +20,22 @@ on:
         type: string
         default: ''
 
+# One run at a time: runs push branches/PRs, so they must not race each other.
+# Never cancel a running upgrade; a newer pending run replaces an older pending one.
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
 permissions:
   contents: read
-
+defaults:
+  run:
+    shell: bash --noprofile --norc -eo pipefail {0}
 jobs:
   upgrade:
-    runs-on: ubuntu-latest
+    name: Upgrade local mise tools
+    runs-on: ubuntu-24.04
+    environment: github-app
     timeout-minutes: 10
     steps:
       - name: "Cleaning up"

@@ -12,7 +12,9 @@ on:
         required: false
         type: string
         default: ''
-
+defaults:
+  run:
+    shell: bash --noprofile --norc -eo pipefail {0}
 concurrency:
   group: gh-action-pulse-pr
   cancel-in-progress: false
@@ -23,7 +25,8 @@ permissions:
 jobs:
   gh-action-pulse-pr:
     name: gh-action-pulse PR
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    environment: github-app
     timeout-minutes: 15
     env:
       UV_LINK_MODE: copy
@@ -99,6 +102,8 @@ jobs:
           fi
 
       - name: Create pull request
+        # Kept on purpose: handles signed commits via the API, branch reuse and PR updates.
+        # jactionlint ignore=superfluous-actions
         uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8.1.1 # gh-action-pulse: override[max-age=250]
         with:
           token: ${{ steps.generate-token.outputs.token }}
@@ -114,7 +119,7 @@ jobs:
           delete-branch: true
 
       - name: Fail on gh-action-pulse errors
-        if: steps.pulse.outputs.exit-code != '0'
+        if: ${{ steps.pulse.outputs.exit-code != '0' }}
         env:
           PULSE_EXIT_CODE: ${{ steps.pulse.outputs.exit-code }}
         run: exit "$PULSE_EXIT_CODE"

@@ -8,14 +8,17 @@ permissions: {}
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: false
-
+defaults:
+  run:
+    shell: bash --noprofile --norc -eo pipefail {0}
 jobs:
   auto-merge:
-    if: github.event.pull_request.user.login == 'dependabot[bot]'
-    runs-on: ubuntu-latest
+    name: Auto-merge Dependabot PRs
+    if: ${{ github.event.pull_request.user.login == 'dependabot[bot]' }}
+    runs-on: ubuntu-24.04
     permissions:
-      contents: write
-      pull-requests: write
+      contents: write # gh pr merge --auto: squash-merge into the base branch
+      pull-requests: write # approve PRs, dismiss reviews, toggle auto-merge
     timeout-minutes: 15
     steps:
       - name: Dependabot metadata
@@ -69,7 +72,7 @@ jobs:
       - name: Approve Dependabot PR
         id: approve
         continue-on-error: true
-        if: steps.metadata.outputs.update-type != 'version-update:semver-major' && steps.commits.outputs.only-dependabot == 'true'
+        if: ${{ steps.metadata.outputs.update-type != 'version-update:semver-major' && steps.commits.outputs.only-dependabot == 'true' }}
         run: gh pr review --approve "$PR_URL"
         env:
           PR_URL: ${{ github.event.pull_request.html_url }}
@@ -78,7 +81,7 @@ jobs:
       - name: Enable auto-merge for minor/patch updates
         id: merge
         continue-on-error: true
-        if: steps.approve.outcome == 'success'
+        if: ${{ steps.approve.outcome == 'success' }}
         run: gh pr merge --auto --squash "$PR_URL"
         env:
           PR_URL: ${{ github.event.pull_request.html_url }}
@@ -87,7 +90,7 @@ jobs:
       # Never fail the workflow because the PR was not auto-approved:
       # surface the reason as a warning annotation instead.
       - name: Report outcome
-        if: always()
+        if: ${{ always() }}
         run: |
           if [ "${APPROVE}" = "success" ] && [ "${MERGE}" = "success" ]; then
             echo "PR approved and auto-merge enabled."

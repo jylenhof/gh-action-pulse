@@ -17,14 +17,19 @@ on:
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: false
-
+defaults:
+  run:
+    shell: bash --noprofile --norc -eo pipefail {0}
+permissions:
+  contents: read
 jobs:
   commit-check:
-    runs-on: ubuntu-latest
+    name: Commit Check
+    runs-on: ubuntu-24.04
     timeout-minutes: 5
-    permissions: # use permissions because use of pr-comments
+    permissions:
       contents: read
-      pull-requests: write
+      pull-requests: write # use permissions because use of pr-comments
     steps:
       - name: "Cleaning up"
         uses: gacts/run-and-post-run@fc6503862aba998e2f2123225ad63c09a92ed46e # v1.4.5
