@@ -11,10 +11,14 @@ permissions:
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: false
-
+defaults:
+  run:
+    shell: bash --noprofile --norc -eo pipefail {0}
 jobs:
   release-please:
-    runs-on: ubuntu-latest
+    name: Release Please
+    runs-on: ubuntu-24.04
+    environment: github-app
     timeout-minutes: 10
     steps:
       - name: Checkout repository

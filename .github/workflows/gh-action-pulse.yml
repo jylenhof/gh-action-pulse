@@ -16,7 +16,9 @@ on:
         required: false
         type: string
         default: ''
-
+defaults:
+  run:
+    shell: bash --noprofile --norc -eo pipefail {0}
 permissions:
   contents: read
 
@@ -27,7 +29,7 @@ concurrency:
 jobs:
   gh-action-pulse:
     name: gh-action-pulse
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     env:
       UV_LINK_MODE: copy
