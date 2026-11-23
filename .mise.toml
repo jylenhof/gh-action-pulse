@@ -10,7 +10,7 @@ jactionlint = "2.6.0"
 "pipx:commit-check" = { version = "2.20.5", uvx = true }
 # "pipx:gh-action-pulse" = { version = "latest", uvx = true }
 prek = "0.5.10"
-rumdl = "0.3.4"
+rumdl = "0.3.5"
 shellcheck = "0.11.0"
 shfmt = "3.14.1"
 tombi = "1.11.3"
